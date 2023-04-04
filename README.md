@@ -28,11 +28,11 @@ It also contains a few testing tools, including utility samplers for performance
 Problems assigned to solvers defined within QUBODrivers.jl's interface are given by
 
 $$\begin{array}{rl}
-\text{QUBO}:~ \displaystyle \min_{\vec{x}} & \displaystyle \alpha \left[{ \vec{x}' Q \vec{x} + \beta }\right] \\
-                               \text{s.t.} & \displaystyle \vec{x} \in S \cong \mathbb{B}^{n}
+\text{QUBO}:~ \displaystyle \min_{\mathbf{x}} & \displaystyle \alpha \left[{ \mathbf{x}' Q \mathbf{x} + \ell' \mathbf{x} + \beta }\right] \\
+\text{s.t.} & \displaystyle \mathbf{x} \in S \cong \mathbb{B}^{n}
 \end{array}$$
 
-where $Q \in \mathbb{R}^{n \times n}$ is a symmetric matrix. Maximization is automatically converted to minimization in a transparent fashion during runtime.
+where $Q \in \mathbb{R}^{n \times n}$ is a strictly upper triangular matrix and $\mathbf{\ell} \in \mathbb{R}^{n}$.
 
 ## Quick Start
 
@@ -69,8 +69,7 @@ for i = 1:result_count(model)
 end
 ```
 
-#### Automatic Interface
-
+---
 
 <div align="center">
     <h2>PSR Quantum Optimization Toolchain</h2>
