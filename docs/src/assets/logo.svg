@@ -31,7 +31,7 @@
     }
 
     .mask{
-        stroke-width: 5mm;
+        stroke-width: 2.5mm;
         fill: #000;
         stroke: #000;
     }
