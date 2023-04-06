@@ -1,152 +1,195 @@
-function __test_basic_examples(config!::Function, sampler::Type{S}) where {S<:AbstractSampler}
+function __test_basic_examples(
+    config!::Function,
+    sampler::Type{<:AbstractSampler{T}},
+) where {T}
     Test.@testset "⊚ Basic ⊚" verbose = true begin
         n = 3
 
-        # ~ QUBO Matrix
-        Q = [
-            -1  2  2
-             2 -1  2
-             2  2 -1
-        ]
+        # QUBO Matrix
+        Q = [-1 2 2; 2 -1 2; 2 2 -1]
 
-        # ~ Boolean States
-        ↑, ↓ = 0, 1
+        # Ising Hamiltonian
+        J = [0 4 4; 0 0 4; 0 0 0]
+        h = [-1; -1; -1]
 
         Test.@testset "▷ Bool ⋄ Min" begin
-            # -*- Build Model -*- #
-            model = JuMP.Model(sampler)
+            let
+                # Build Model
+                model = MOI.instantiate(sampler; with_bridge_type = T)
 
-            JuMP.@variable(model, x[1:n], Bin)
-            JuMP.@objective(model, Min, x' * Q * x)
+                x, _ = MOI.add_constrained_variables(model, fill(MOI.ZeroOne(), n))
 
-            # -* Configure Model *- #
-            config!(model)
+                MOI.set(model, MOI.ObjectiveSense(), MOI.MIN_SENSE)
+                MOI.set(
+                    model,
+                    MOI.ObjectiveFunction{SQF{T}}(),
+                    SQF{T}(
+                        SQT{T}[SQT{T}(Q[i, j], x[i], x[j]) for i = 1:n for j = 1:n if i != j],
+                        SAT{T}[SAT{T}(Q[i, i], x[i]) for i = 1:n],
+                        zero(T),
+                    ),
+                )
 
-            # -*- Run -*- #
-            JuMP.optimize!(model)
+                # Configure Model
+                config!(model)
 
-            Test.@test JuMP.result_count(model) > 0
+                # Run
+                MOI.optimize!(model)
 
-            for i = 1:JuMP.result_count(model)
-                xi = JuMP.value.(x; result = i)
-                yi = JuMP.objective_value(model; result = i)
+                Test.@test MOI.get(model, MOI.ResultCount()) > 0
 
-                if xi ≈ [↑, ↑, ↓] || xi ≈ [↑, ↓, ↑] || xi ≈ [↓, ↑, ↑]
-                    Test.@test yi ≈ -1.0
-                elseif xi ≈ [↑, ↑, ↑]
-                    Test.@test yi ≈ 0.0
-                elseif xi ≈ [↑, ↓, ↓] || xi ≈ [↓, ↓, ↑] || xi ≈ [↓, ↑, ↓]
-                    Test.@test yi ≈ 2.0
-                elseif xi ≈ [↓, ↓, ↓]
-                    Test.@test yi ≈ 9.0
-                else
-                    Test.@test false
+                for i = 1:MOI.get(model, MOI.ResultCount())
+                    xi = MOI.get.(model, MOI.VariablePrimal(i), x)
+                    yi = MOI.get(model, MOI.ObjectiveValue(i))
+
+                    if xi ≈ [0, 0, 1] || xi ≈ [0, 1, 0] || xi ≈ [1, 0, 0]
+                        Test.@test yi ≈ -1.0
+                    elseif xi ≈ [0, 0, 0]
+                        Test.@test yi ≈ 0.0
+                    elseif xi ≈ [0, 1, 1] || xi ≈ [1, 1, 0] || xi ≈ [1, 0, 1]
+                        Test.@test yi ≈ 2.0
+                    elseif xi ≈ [1, 1, 1]
+                        Test.@test yi ≈ 9.0
+                    else
+                        @show xi
+                        Test.@test false
+                    end
                 end
             end
         end
 
         Test.@testset "▷ Bool ⋄ Max" begin
-            # -*- Build Model -*- #
-            model = JuMP.Model(sampler)
-            
-            JuMP.@variable(model, x[1:n], Bin)
-            JuMP.@objective(model, Max, x' * Q * x)
+            let
+                # Build Model
+                model = MOI.instantiate(sampler; with_bridge_type = T)
 
-            # -* Configure Model *- #
-            config!(model)
+                x, _ = MOI.add_constrained_variables(model, fill(MOI.ZeroOne(), n))
 
-            # -*- Run -*- #
-            JuMP.optimize!(model)
+                MOI.set(model, MOI.ObjectiveSense(), MOI.MAX_SENSE)
+                MOI.set(
+                    model,
+                    MOI.ObjectiveFunction{SQF{T}}(),
+                    SQF{T}(
+                        SQT{T}[SQT{T}(Q[i, j], x[i], x[j]) for i = 1:n for j = 1:n if i != j],
+                        SAT{T}[SAT{T}(Q[i, i], x[i]) for i = 1:n],
+                        zero(T),
+                    ),
+                )
 
-            Test.@test JuMP.result_count(model) > 0
+                # Configure Model
+                config!(model)
 
-            for i = 1:JuMP.result_count(model)
-                xi = JuMP.value.(x; result = i)
-                yi = JuMP.objective_value(model; result = i)
+                # Run
+                MOI.optimize!(model)
 
-                if xi ≈ [↓, ↓, ↓]
-                    Test.@test yi ≈ 9.0
-                elseif xi ≈ [↑, ↓, ↓] || xi ≈ [↓, ↓, ↑] || xi ≈ [↓, ↑, ↓]
-                    Test.@test yi ≈ 2.0
-                elseif xi ≈ [↑, ↑, ↑]
-                    Test.@test yi ≈ 0.0
-                elseif xi ≈ [↑, ↑, ↓] || xi ≈ [↑, ↓, ↑] || xi ≈ [↓, ↑, ↑]
-                    Test.@test yi ≈ -1.0
-                else
-                    Test.@test false
+                Test.@test MOI.get(model, MOI.ResultCount()) > 0
+
+                for i = 1:MOI.get(model, MOI.ResultCount())
+                    xi = MOI.get.(model, MOI.VariablePrimal(i), x)
+                    yi = MOI.get(model, MOI.ObjectiveValue(i))
+
+                    if xi ≈ [1, 1, 1]
+                        Test.@test yi ≈ 9.0
+                    elseif xi ≈ [0, 1, 1] || xi ≈ [1, 1, 0] || xi ≈ [1, 0, 1]
+                        Test.@test yi ≈ 2.0
+                    elseif xi ≈ [0, 0, 0]
+                        Test.@test yi ≈ 0.0
+                    elseif xi ≈ [0, 0, 1] || xi ≈ [0, 1, 0] || xi ≈ [1, 0, 0]
+                        Test.@test yi ≈ -1.0
+                    else
+                        @show xi
+                        Test.@test false
+                    end
                 end
             end
         end
 
-        # ~ Ising Hamiltonian
-        J = [0 4 4; 0 0 4; 0 0 0]
-        h = [-1; -1; -1]
-
-        # ~ Spin states
-        ↑, ↓ = -1, 1
-
         Test.@testset "▷ Spin ⋄ Min" begin
-            # -*- Build Model -*- #
-            model = JuMP.Model(sampler)
+            let
+                # Build Model
+                model = MOI.instantiate(sampler; with_bridge_type = T)
 
-            JuMP.@variable(model, s[1:n], Anneal.Spin)
-            JuMP.@objective(model, Min, s' * J * s + h' * s)
+                s, _ = MOI.add_constrained_variables(model, fill(Spin(), n))
 
-            # -* Configure Model *- #
-            config!(model)
+                MOI.set(model, MOI.ObjectiveSense(), MOI.MIN_SENSE)
+                MOI.set(
+                    model,
+                    MOI.ObjectiveFunction{SQF{T}}(),
+                    SQF{T}(
+                        SQT{T}[SQT{T}(J[i, j], s[i], s[j]) for i = 1:n for j = 1:n],
+                        SAT{T}[SAT{T}(h[i], s[i]) for i = 1:n],
+                        zero(T),
+                    ),
+                )
 
-            # -*- Run -*- #
-            JuMP.optimize!(model)
+                # Configure Model
+                config!(model)
 
-            Test.@test JuMP.result_count(model) > 0
+                # Run
+                MOI.optimize!(model)
 
-            for i = 1:JuMP.result_count(model)
-                si = JuMP.value.(s; result = i)
-                Hi = JuMP.objective_value(model; result = i)
+                Test.@test MOI.get(model, MOI.ResultCount()) > 0
 
-                if si ≈ [↓, ↓, ↑] || si ≈ [↓, ↑, ↓] || si ≈ [↑, ↓, ↓]
-                    Test.@test Hi ≈ -5.0
-                elseif si ≈ [↑, ↑, ↓] || si ≈ [↑, ↓, ↑] || si ≈ [↓, ↑, ↑]
-                    Test.@test Hi ≈ -3.0
-                elseif si ≈ [↓, ↓, ↓]
-                    Test.@test Hi ≈ 9.0
-                elseif si ≈ [↑, ↑, ↑]
-                    Test.@test Hi ≈ 15.0
-                else
-                    Test.@test false
+                for i = 1:MOI.get(model, MOI.ResultCount())
+                    si = MOI.get.(model, MOI.VariablePrimal(i), s)
+                    Hi = MOI.get(model, MOI.ObjectiveValue(i))
+
+                    if si ≈ [↓, ↓, ↑] || si ≈ [↓, ↑, ↓] || si ≈ [↑, ↓, ↓]
+                        Test.@test Hi ≈ -5.0
+                    elseif si ≈ [↑, ↑, ↓] || si ≈ [↑, ↓, ↑] || si ≈ [↓, ↑, ↑]
+                        Test.@test Hi ≈ -3.0
+                    elseif si ≈ [↓, ↓, ↓]
+                        Test.@test Hi ≈ 9.0
+                    elseif si ≈ [↑, ↑, ↑]
+                        Test.@test Hi ≈ 15.0
+                    else
+                        Test.@test false
+                    end
                 end
             end
         end
 
         Test.@testset "▷ Spin ⋄ Max" begin
-            # -*- Build Model -*- #
-            model = JuMP.Model(sampler)
+            let
+                # Build Model
+                model = MOI.instantiate(sampler; with_bridge_type = T)
 
-            JuMP.@variable(model, s[1:n], Anneal.Spin)
-            JuMP.@objective(model, Max, s' * J * s + h' * s)
+                s, _ = MOI.add_constrained_variables(model, fill(Spin(), n))
 
-            # -* Configure Model *- #
-            config!(model)
+                MOI.set(model, MOI.ObjectiveSense(), MOI.MAX_SENSE)
+                MOI.set(
+                    model,
+                    MOI.ObjectiveFunction{SQF{T}}(),
+                    SQF{T}(
+                        SQT{T}[SQT{T}(J[i, j], s[i], s[j]) for i = 1:n for j = 1:n],
+                        SAT{T}[SAT{T}(h[i], s[i]) for i = 1:n],
+                        zero(T),
+                    ),
+                )
 
-            # -*- Run -*- #
-            JuMP.optimize!(model)
+                # Configure Model
+                config!(model)
 
-            Test.@test JuMP.result_count(model) > 0
+                # Run
+                MOI.optimize!(model)
 
-            for i = 1:JuMP.result_count(model)
-                si = JuMP.value.(s; result = i)
-                Hi = JuMP.objective_value(model; result = i)
+                Test.@test MOI.get(model, MOI.ResultCount()) > 0
 
-                if si ≈ [↑, ↑, ↑]
-                    Test.@test Hi ≈ 15.0
-                elseif si ≈ [↓, ↓, ↓]
-                    Test.@test Hi ≈ 9.0
-                elseif si ≈ [↑, ↑, ↓] || si ≈ [↑, ↓, ↑] || si ≈ [↓, ↑, ↑]
-                    Test.@test Hi ≈ -3.0
-                elseif si ≈ [↓, ↓, ↑] || si ≈ [↓, ↑, ↓] || si ≈ [↑, ↓, ↓]
-                    Test.@test Hi ≈ -5.0
-                else
-                    Test.@test false
+                for i = 1:MOI.get(model, MOI.ResultCount())
+                    si = MOI.get.(model, MOI.VariablePrimal(i), s)
+                    Hi = MOI.get(model, MOI.ObjectiveValue(i))
+
+                    if si ≈ [↑, ↑, ↑]
+                        Test.@test Hi ≈ 15.0
+                    elseif si ≈ [↓, ↓, ↓]
+                        Test.@test Hi ≈ 9.0
+                    elseif si ≈ [↑, ↑, ↓] || si ≈ [↑, ↓, ↑] || si ≈ [↓, ↑, ↑]
+                        Test.@test Hi ≈ -3.0
+                    elseif si ≈ [↓, ↓, ↑] || si ≈ [↓, ↑, ↓] || si ≈ [↑, ↓, ↓]
+                        Test.@test Hi ≈ -5.0
+                    else
+                        Test.@test false
+                    end
                 end
             end
         end
