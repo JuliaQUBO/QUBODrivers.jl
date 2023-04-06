@@ -177,6 +177,8 @@ function MOI.set(sampler::AutomaticSampler, attr::MOI_ATTRIBUTE, value)
     return nothing
 end
 
+MOI.supports(sampler::AutomaticSampler, attr::MOI_ATTRIBUTE) = true
+
 # AbstractSamplerAttribute
 function MOI.get(sampler::AutomaticSampler, attr::AbstractSamplerAttribute)
     if haskey(sampler.attr_data.optattrs, attr)
