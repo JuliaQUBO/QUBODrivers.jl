@@ -1,6 +1,6 @@
 using Test
 using QUBODrivers
-using QUBOTools
+using QUBODrivers: QUBOTools
 
 include("drivers/exact_sampler.jl")
 include("drivers/identity_sampler.jl")
