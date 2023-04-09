@@ -69,6 +69,15 @@ for i = 1:result_count(model)
 end
 ```
 
+## Badge
+If your project is using [QUBODrivers.jl](https://github.com/psrenergy/QUBODrivers.jl), consider adding the official badge to your project's README file:
+
+[![QUBODRIVERS](https://img.shields.io/badge/Powered%20by-QUBODrivers.jl-%20%234063d8)](https://github.com/psrenergy/QUBODrivers.jl)
+
+```md
+[![QUBODRIVERS](https://img.shields.io/badge/Powered%20by-QUBODrivers.jl-%20%234063d8)](https://github.com/psrenergy/QUBODrivers.jl)
+```
+
 ---
 
 <div align="center">
