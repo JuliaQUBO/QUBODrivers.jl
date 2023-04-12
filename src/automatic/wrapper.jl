@@ -226,17 +226,50 @@ end
 #     return sampler
 # end
 
-function warm_start(sampler::AutomaticSampler{T}, i::Integer) where {T}
+source_domain(sampler::AutomaticSampler) = QUBOTools.domain(sampler.model)
+target_domain(sampler::AutomaticSampler) = sampler.domain
+
+function warm_start(sampler::AutomaticSampler{T}, i::Integer)::Union{T,Nothing} where {T}
     v = QUBOTools.variable_inv(sampler, i)
     x = MOI.get(sampler, MOI.VariablePrimalStart(), v)
 
     if isnothing(x)
-        error("Missing warm-start value for state variable '$v'")
+        return nothing
     else
         # TODO: QUBOTools should know how to cast single integers?
-        s = QUBOTools.cast(QUBOTools.domain(sampler.model), sampler.domain, round.(Int, [x]))
+        y = QUBOTools.cast(
+            source_domain(sampler),
+            target_domain(sampler),
+            round.(Int, [x])
+        )
 
         # TODO: This is not good...
-        return T(s[])
+        return convert(T, y[])
     end
+end
+
+function warm_start(sampler::AutomaticSampler{T})::Union{T,Nothing} where {T}
+    n = MOI.get(sampler, MOI.NumberOfVariables())
+    s = sizehint!(Dict{Int,Union{T,Nothing}}(), n)
+
+    for i = 1:n
+        v = QUBOTools.variable_inv(sampler, i)
+        x = MOI.get(sampler, MOI.VariablePrimalStart(), v)
+
+        if isnothing(x)
+            s[i] = nothing
+        else
+            # TODO: QUBOTools should know how to cast single integers?
+            y = QUBOTools.cast(
+                source_domain(sampler),
+                target_domain(sampler),
+                round.(Int, [x])
+            )
+
+            # TODO: This is not good...
+            s[i] = convert(T, y[])
+        end
+    end
+
+    return s
 end
