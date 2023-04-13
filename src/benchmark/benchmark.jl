@@ -3,7 +3,7 @@
 
 """ function benchmark end
 
-function Anneal.benchmark(sampler::AbstractSampler)
+function QUBODrivers.benchmark(sampler::AbstractSampler)
     
 end
 
@@ -13,14 +13,14 @@ end
 ## Example
 
 ```
-using Anneal
+using QUBODrivers
 using SuperSampler
 
-SUITE = Anneal.benchmark_suite(SuperSampler.Optimizer)
+SUITE = QUBODrivers.benchmark_suite(SuperSampler.Optimizer)
 ```
 """ function benchmark_suite end
 
-function Anneal.benchmark_suite(sampler::AbstractSampler)
+function QUBODrivers.benchmark_suite(sampler::AbstractSampler)
     suite = BenchmarkTools.BenchmarkGroup()
 
     return suite

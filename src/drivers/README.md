@@ -1,6 +1,6 @@
-# Anneal.jl - QUBO Samplers
+# QUBODrivers.jl - QUBO Samplers
 
-To setup your own QUBO sampling system, one must implement some `MathOptInterface` and `Anneal` API requirements.
+To setup your own QUBO sampling system, one must implement some `MathOptInterface` and `QUBODrivers` API requirements.
 
 ## `MathOptInterface`
 
@@ -10,15 +10,15 @@ To setup your own QUBO sampling system, one must implement some `MathOptInterfac
 | `MOI.SolverVersion` | `String`    |   ⚠️   |   -   |     -      |
 | `MOI.RawSolver`     | `String`    |   ⚠️   |   -   |     -      |
 
-## `Anneal`
+## `QUBODrivers`
 
-### `struct Optimizer{T} <: Anneal.AbstractSampler{T}`
+### `struct Optimizer{T} <: QUBODrivers.AbstractSampler{T}`
 
-### `Anneal.sample(::Optimizer{T})`
+### `QUBODrivers.sample(::Optimizer{T})`
 
 
 ```julia
-Anneal.@anew begin
+QUBODrivers.@setup begin
     NumberOfReads::Int = 1_000
 end
 ```

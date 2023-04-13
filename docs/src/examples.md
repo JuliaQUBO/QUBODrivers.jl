@@ -1,10 +1,10 @@
 # Examples
 
-## Solving Simple QUBO Model with Anneal's [`RandomSampler`](@ref random-sampler)
+## Solving Simple QUBO Model with QUBODrivers's [`RandomSampler`](@ref random-sampler)
 
 ```@example simple-workflow
 using JuMP
-using Anneal
+using QUBODrivers
 
 model = Model(RandomSampler.Optimizer)
 

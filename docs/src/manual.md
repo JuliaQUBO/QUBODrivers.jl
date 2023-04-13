@@ -2,7 +2,7 @@
 
 ## Introduction
 The core idea behind this package is to provide a toolbox for developing and integrating [QUBO](https://en.wikipedia.org/wiki/Quadratic_unconstrained_binary_optimization) sampling tools with the [JuMP](https://jump.dev) mathematical programming environment.
-Appart from the few couple exported utility engines, Anneal.jl is inherently about extensions, which is achieved by implementing most of the [MOI](https://jump.dev/MathOptInterface.jl) requirements, leaving only the essential for the developer.
+Appart from the few couple exported utility engines, QUBODrivers.jl is inherently about extensions, which is achieved by implementing most of the [MOI](https://jump.dev/MathOptInterface.jl) requirements, leaving only the essential for the developer.
 
 ### QUBO
 An optimization problem is in its QUBO form if it is written as
@@ -15,8 +15,8 @@ An optimization problem is in its QUBO form if it is written as
 ```
 with linear terms ``\mathbf{\ell} \in \mathbb{R}^{n}`` and quadratic ``\mathbf{Q} \in \mathbb{R}^{n \times n}``. ``\alpha, \beta \in \mathbb{R}`` are, respectively, the scaling and offset factors.
 
-The MOI-JuMP optimizers defined using the `Anneal.AbstractSampler{T} <: MOI.AbstractOptimizer` interface only support models given in the QUBO form.
-_Anneal.jl_ employs [QUBOTools](https://github.com/psrenergy/QUBOTools.jl) on many tasks involving data management and querying.
+The MOI-JuMP optimizers defined using the `QUBODrivers.AbstractSampler{T} <: MOI.AbstractOptimizer` interface only support models given in the QUBO form.
+`QUBODrivers.jl` employs [QUBOTools](https://github.com/psrenergy/QUBOTools.jl) on many tasks involving data management and querying.
 It is worth taking a look at [QUBOTool's docs](https://psrenergy.github.io/QUBOTools.jl).
 
 ## Defining a new sampler interface
@@ -33,28 +33,28 @@ Below, there are links to the files where the actual interfaces are implemented,
 |                                                                                           | [MCMCRandom](https://github.com/psrenergy/IsingSolvers.jl/blob/main/src/solvers/mcmc_random.jl)                                   |
 | [QuantumAnnealingInterface.jl](https://github.com/psrenergy/QuantumAnnealingInterface.jl) | [QuantumAnnealingInterface](https://github.com/psrenergy/QuantumAnnealingInterface.jl/blob/main/src/QuantumAnnealingInterface.jl) |
 
-### The [`@anew`](@id anew) macro
-`Anneal.@anew` is available to speed up the interface setup process.
+### The [`@setup`](@id setup) macro
+`QUBODrivers.@setup` is available to speed up the interface setup process.
 This mechanism was created to reach the majority of the target audience, that is, researchers interested in integrating their QUBO/Ising samplers in a common optimization ecossystem.
 
 ```@docs
-Anneal.@anew
+QUBODrivers.@setup
 ```
 
-Inside a module scope for the new interface, one should call the [`Anneal.@anew`](@ref anew) macro, specifying the solver's attributes as described in the macro's docs.
-The second and last step is to define the `Anneal.sample(::Optimizer)` method, that must return a [`Anneal.SampleSet`](@ref sampleset).
+Inside a module scope for the new interface, one should call the [`QUBODrivers.@setup`](@ref setup) macro, specifying the solver's attributes as described in the macro's docs.
+The second and last step is to define the `QUBODrivers.sample(::Optimizer)` method, that must return a [`QUBODrivers.SampleSet`](@ref sampleset).
 
 Using it might be somehow restrictive in comparison to the regular [JuMP/MOI Solver Interface workflow](https://jump.dev/MathOptInterface.jl/stable/tutorials/implementing/).
 Yet, our guess is that most of this package's users are not considering going deeper into the MOI internals that soon.
 
-### [`@anew`](@ref anew-macro) example
+### [`@setup`](@ref setup-macro) example
 The following example is intended to illustrate the usage of the macro, showing how simple it should be to implement a wrapper for a sampler implemented in another language such as C or C++.
 
 ```julia
 module SuperSampler
-    using Anneal
+    using QUBODrivers
 
-    Anneal.@anew Optimizer begin
+    QUBODrivers.@setup Optimizer begin
         name    = "Super Sampler"
         sense   = :max
         domain  = :spin
@@ -70,9 +70,9 @@ module SuperSampler
     @variable(model, x[1:n], Bin)
     @objective(model, Min, x' * Q * x)
 
-    function Anneal.sample(sampler::Optimizer{T}) where {T}
+    function QUBODrivers.sample(sampler::Optimizer{T}) where {T}
         # ~ Is your annealer running on the Ising Model? Have this:
-        h, J, u, v = Anneal.ising(
+        h, J, u, v = QUBODrivers.ising(
             sampler,
             Vector, # Here we opt for a sparse, vector representation
         )
@@ -106,10 +106,10 @@ module SuperSampler
 
         # ~ Here some magic happens:
         #   By providing the sampler and a vector of states,
-        #   Anneal.jl computes the energy and organizes your
+        #   QUBODrivers.jl computes the energy and organizes your
         #   solutions automatically, following the variable
         #   domain conventions specified previously.
-        return Anneal.SampleSet{T}(sampler, states, metadata)
+        return QUBODrivers.SampleSet{T}(sampler, states, metadata)
     end
 
     function super_sample(h, J, u, v; super_attr, kws...)
@@ -140,14 +140,14 @@ First of all, the entire work must be done within a module.
 
 ```julia
 module SuperSampler
-    using Anneal
+    using QUBODrivers
 ```
 
-By provding the `using Anneal` statement, very little will be dumped into the namespace apart from the `MOI = MathOptInterface` constant.
+By provding the `using QUBODrivers` statement, very little will be dumped into the namespace apart from the `MOI = MathOptInterface` constant.
 MOI's methods will soon be very important to access our optimizer's attributes.
 
 ```julia
-Anneal.@anew Optimizer begin
+QUBODrivers.@setup Optimizer begin
     name    = "Super Sampler"
     sense   = :max
     domain  = :spin
@@ -159,7 +159,7 @@ Anneal.@anew Optimizer begin
 end
 ```
 
-The first parameter in the `@anew` call is the optimizer's identifier.
+The first parameter in the `@setup` call is the optimizer's identifier.
 It defaults to `Optimizer` and, in this case, is responsible for defining the `Optimizer{T} <: MOI.AbstractOptimizer` struct.
 A `begin...end` block comes next, with a few key-value pairs.
 
@@ -199,5 +199,5 @@ version = v"1.0.2"
 
 # Automatic Tests
 ```@docs
-Anneal.test
+QUBODrivers.test
 ```

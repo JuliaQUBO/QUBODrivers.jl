@@ -1,19 +1,19 @@
 # A new Sampler
-This guide aims to provide a tutorial on how to implement new sampler interfaces using [Anneal.jl](https://github.com/psrenergy/Anneal.jl).
+This guide aims to provide a tutorial on how to implement new sampler interfaces using [QUBODrivers.jl](https://github.com/psrenergy/QUBODrivers.jl).
 
-## The `@anew` macro
-Using the [`Anneal.@anew`](@ref anew-macro) macro is the most straightforward way to get your sampler running right now.
-Apart from the macro call it is needed to implement the [`Anneal.sample`](@ref) method.
+## The `@setup` macro
+Using the [`QUBODrivers.@setup`](@ref setup-macro) macro is the most straightforward way to get your sampler running right now.
+Apart from the macro call it is needed to implement the [`QUBODrivers.sample`](@ref) method.
 
 ### I. Imports
-First of all, we are going to import both `Anneal.jl` and also `MathOptInterface.jl`, commonly aliased as `MOI`.
+First of all, we are going to import both `QUBODrivers.jl` and also `MathOptInterface.jl`, commonly aliased as `MOI`.
 ```julia
-import Anneal
+import QUBODrivers
 import MathOptInterface
 const MOI = MathOptInterface
 ```
 
-### II. `@anew`
+### II. `@setup`
 This macro takes two arguments: the identifier of the sampler's `struct`, and a `begin...end` block containing configuration parameters as *key-value* pairs.
 If ommited, the first defaults to `Optimizer`, following regular `MOI` conventions.
 In order to work smoothly, this approach leverages the [`QUBOTools`](https://github.com/psrenergy/QUBOTools.jl) backend.
@@ -76,7 +76,7 @@ This Document is intended to help keeping track of which MOI API Methods and Pro
 ## Key
 | Symbol | Meaning                                           |
 | :----: | :------------------------------------------------ |
-|   Ⓜ️    | Implemented via the [`@anew`]() macro             |
+|   Ⓜ️    | Implemented via the [`@setup`]() macro             |
 |   ✅    | Available for [`Sampler{T}`]()                    |
 |   ✔️    | Available for [`AbstracSampler{T}`]()             |
 |   ⚠️    | Must be implemented                               |

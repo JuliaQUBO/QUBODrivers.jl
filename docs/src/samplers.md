@@ -2,23 +2,23 @@
 
 ## [Abstract Sampler](@id abstract-sampler)
 ```@docs
-Anneal.AbstractSampler
+QUBODrivers.AbstractSampler
 ```
 
 ## [Identity Sampler](@id identity-sampler)
 
 ```@docs
-Anneal.IdentitySampler.Optimizer
+QUBODrivers.IdentitySampler.Optimizer
 ```
 
 ## [Exact Sampler](@id exact-sampler)
 
 ```@docs
-Anneal.ExactSampler.Optimizer
+QUBODrivers.ExactSampler.Optimizer
 ```
 
 ## [Random Sampler](@id random-sampler)
 
 ```@docs
-Anneal.RandomSampler.Optimizer
+QUBODrivers.RandomSampler.Optimizer
 ```
