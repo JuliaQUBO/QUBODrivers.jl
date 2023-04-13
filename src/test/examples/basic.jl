@@ -51,7 +51,6 @@ function __test_basic_examples(
                     elseif xi ≈ [1, 1, 1]
                         Test.@test yi ≈ 9.0
                     else
-                        @show xi
                         Test.@test false
                     end
                 end
@@ -97,7 +96,6 @@ function __test_basic_examples(
                     elseif xi ≈ [0, 0, 1] || xi ≈ [0, 1, 0] || xi ≈ [1, 0, 0]
                         Test.@test yi ≈ -1.0
                     else
-                        @show xi
                         Test.@test false
                     end
                 end
