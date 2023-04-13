@@ -1,12 +1,11 @@
 # ~*~ :: QUBOTools :: ~*~ #
+
+# Define casting routes i.e. source => target pairs of senses and domains:
+sense_route(sampler::AutomaticSampler)  = (QUBOTools.sense(sampler.model) => sampler.sense)
+domain_route(sampler::AutomaticSampler) = (QUBOTools.domain(sampler.model) => sampler.domain)
+
 function QUBOTools.backend(sampler::AutomaticSampler)
-    return QUBOTools.cast(
-        QUBOTools.sense(sampler.model),
-        sampler.sense,
-        QUBOTools.domain(sampler.model),
-        sampler.domain,
-        sampler.model
-    )
+    return QUBOTools.cast(sense_route(sampler), domain_route(sampler), sampler.model)
 end
 
 # ~*~ :: MathOptInterface :: ~*~ #
@@ -39,15 +38,6 @@ function MOI.copy_to(sampler::AutomaticSampler{T}, model::MOI.ModelLike) where {
     return MOIU.identity_index_map(model)
 end
 
-# # function Base.show(io::IO, sampler::AutomaticSampler)
-# #     print(
-# #         io,
-# #         """
-# #         Solver: $(MOI.get(sampler, MOI.SolverName()))
-# #         """,
-# #     )
-# # end
-
 function MOI.get(
     sampler::AutomaticSampler,
     st::Union{MOI.PrimalStatus,MOI.DualStatus},
@@ -63,12 +53,12 @@ function MOI.get(
 end
 
 function MOI.get(sampler::AutomaticSampler, ::MOI.RawStatusString)
-    data = QUBOTools.metadata(QUBOTools.sampleset(sampler.model))
+    solution_metadata = QUBOTools.metadata(QUBOTools.sampleset(sampler.model))
 
-    if !haskey(data, "status")
+    if !haskey(solution_metadata, "status")
         return ""
     else
-        return data["status"]::String
+        return solution_metadata["status"]::String
     end
 end
 
@@ -158,9 +148,8 @@ function QUBOTools.qubo(sampler::AutomaticSampler, type::Type = Dict)
     n = QUBOTools.domain_size(sampler.model)
 
     L, Q, α, β = QUBOTools.cast(
-        # domain
-        QUBOTools.domain(sampler.model), # source
-        sampler.domain,                  # target
+        sense_route(sampler),
+        domain_route(sampler),
         # model terms and coefficients
         QUBOTools.linear_terms(sampler.model),
         QUBOTools.quadratic_terms(sampler.model),
@@ -168,14 +157,6 @@ function QUBOTools.qubo(sampler::AutomaticSampler, type::Type = Dict)
         QUBOTools.offset(sampler.model),
     )
 
-    L, Q, α, β = QUBOTools.cast(
-        # sense
-        QUBOTools.sense(sampler.model), # source
-        sampler.sense,                  # target
-        # model terms and coefficients
-        L, Q, α, β
-    )
-    
     return QUBOTools.qubo(type, n, L, Q, α, β)
 end
 
@@ -185,9 +166,8 @@ function QUBOTools.ising(sampler::AutomaticSampler, type::Type = Dict)
     n = QUBOTools.domain_size(sampler.model)
 
     L, Q, α, β = QUBOTools.cast(
-        # domain
-        QUBOTools.domain(sampler.model), # source
-        sampler.domain,                  # target
+        sense_route(sampler),
+        domain_route(sampler),
         # model terms and coefficients
         QUBOTools.linear_terms(sampler.model),
         QUBOTools.quadratic_terms(sampler.model),
@@ -195,14 +175,6 @@ function QUBOTools.ising(sampler::AutomaticSampler, type::Type = Dict)
         QUBOTools.offset(sampler.model),
     )
 
-    L, Q, α, β = QUBOTools.cast(
-        # sense
-        QUBOTools.sense(sampler.model), # source
-        sampler.sense,                  # target
-        # model terms and coefficients
-        L, Q, α, β
-    )
-    
     return QUBOTools.ising(type, n, L, Q, α, β)
 end
 
@@ -226,49 +198,24 @@ end
 #     return sampler
 # end
 
-source_domain(sampler::AutomaticSampler) = QUBOTools.domain(sampler.model)
-target_domain(sampler::AutomaticSampler) = sampler.domain
-
-function warm_start(sampler::AutomaticSampler{T}, i::Integer)::Union{T,Nothing} where {T}
+function warm_start(sampler::AutomaticSampler, i::Integer)
     v = QUBOTools.variable_inv(sampler, i)
     x = MOI.get(sampler, MOI.VariablePrimalStart(), v)
 
     if isnothing(x)
         return nothing
     else
-        # TODO: QUBOTools should know how to cast single integers?
-        y = QUBOTools.cast(
-            source_domain(sampler),
-            target_domain(sampler),
-            round.(Int, [x])
-        )
-
-        # TODO: This is not good...
-        return convert(T, y[])
+        return QUBOTools.cast(domain_route(sampler), round(Int, x))
     end
 end
 
-function warm_start(sampler::AutomaticSampler{T})::Union{T,Nothing} where {T}
+function warm_start(sampler::AutomaticSampler{T}) where {T}
     n = MOI.get(sampler, MOI.NumberOfVariables())
-    s = sizehint!(Dict{Int,Union{T,Nothing}}(), n)
+    s = sizehint!(Dict{Int,Int}(), n)
 
     for i = 1:n
-        v = QUBOTools.variable_inv(sampler, i)
-        x = MOI.get(sampler, MOI.VariablePrimalStart(), v)
-
-        if isnothing(x)
-            s[i] = nothing
-        else
-            # TODO: QUBOTools should know how to cast single integers?
-            y = QUBOTools.cast(
-                source_domain(sampler),
-                target_domain(sampler),
-                round.(Int, [x])
-            )
-
-            # TODO: This is not good...
-            s[i] = convert(T, y[])
-        end
+        x = warm_start(sampler, i)
+        isnothing(x) || (s[i] = x)
     end
 
     return s
