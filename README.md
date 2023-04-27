@@ -9,14 +9,17 @@
     <a href="https://codecov.io/gh/psrenergy/QUBODrivers.jl">
         <img src="https://codecov.io/gh/psrenergy/QUBODrivers.jl/branch/master/graph/badge.svg?token=729WFU0752"/>
     </a>
-    <a href="https://psrenergy.github.io/QUBODrivers.jl/dev">
-        <img src="https://img.shields.io/badge/docs-dev-blue.svg" alt="Docs">
-    </a>
     <a href="https://github.com/psrenergy/QUBODrivers.jl/actions/workflows/ci.yml">
         <img src="https://github.com/psrenergy/QUBODrivers.jl/actions/workflows/ci.yml/badge.svg?branch=master" alt="CI" />
     </a>
-    <a href="https://doi.org/10.5281/zenodo.6390515">
-        <img src="https://zenodo.org/badge/DOI/10.5281/zenodo.6390515.svg" alt="DOI">
+    <a href="https://www.youtube.com/watch?v=OTmzlTbqdNo">
+        <img src="https://img.shields.io/badge/JuliaCon-2022-9558b2" alt="JuliaCon 2022">
+    </a>
+    <a href="https://psrenergy.github.io/QUBODrivers.jl/dev">
+        <img src="https://img.shields.io/badge/docs-dev-blue.svg" alt="Docs">
+    </a>
+    <a href="https://zenodo.org/badge/latestdoi/623618138">
+        <img src="https://zenodo.org/badge/623618138.svg" alt="DOI">
     </a>
 </div>
 
