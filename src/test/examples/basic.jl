@@ -1,4 +1,4 @@
-function __test_basic_bool_min(
+function _test_basic_bool_min(
     config!::Function,
     sampler::Type{S},
     n::Integer,
@@ -47,7 +47,7 @@ function __test_basic_bool_min(
     return nothing
 end
 
-function __test_basic_bool_max(
+function _test_basic_bool_max(
     config!::Function,
     sampler::Type{S},
     n::Integer,
@@ -96,7 +96,7 @@ function __test_basic_bool_max(
     return nothing
 end
 
-function __test_basic_spin_min(
+function _test_basic_spin_min(
     config!::Function,
     sampler::Type{S},
     n::Integer,
@@ -147,7 +147,7 @@ function __test_basic_spin_min(
     return nothing
 end
 
-function __test_basic_spin_max(
+function _test_basic_spin_max(
     config!::Function,
     sampler::Type{S},
     n::Integer,
@@ -198,7 +198,7 @@ function __test_basic_spin_max(
     return nothing
 end
 
-function __test_basic_examples(
+function _test_basic_examples(
     config!::Function,
     sampler::Type{S},
 ) where {T,S<:AbstractSampler{T}}
@@ -213,10 +213,10 @@ function __test_basic_examples(
         J = T[0 4 4; 0 0 4; 0 0 0]
         h = T[-1; -1; -1]
 
-        __test_basic_bool_min(config!, sampler, n, Q)
-        __test_basic_bool_max(config!, sampler, n, Q)
-        __test_basic_spin_min(config!, sampler, n, h, J)
-        __test_basic_spin_max(config!, sampler, n, h, J)
+        _test_basic_bool_min(config!, sampler, n, Q)
+        _test_basic_bool_max(config!, sampler, n, Q)
+        _test_basic_spin_min(config!, sampler, n, h, J)
+        _test_basic_spin_max(config!, sampler, n, h, J)
     end
 
     return nothing
