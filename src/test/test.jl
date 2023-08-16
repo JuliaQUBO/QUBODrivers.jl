@@ -3,12 +3,13 @@ include("interface/moi.jl")
 include("interface/automatic.jl")
 
 # Example Tests
-include("examples/basic.jl")
+include("examples/examples.jl")
 
 @doc raw"""
     test(optimizer::Type{S}; examples::Bool=false) where {S<:AbstractSampler}
     test(config!::Function, optimizer::Type{S}; examples::Bool=false) where {S<:AbstractSampler}
-""" function test end
+"""
+function test end
 
 function QUBODrivers.test(::Type{S}; examples::Bool=true) where {S<:AbstractSampler}
     QUBODrivers.test(identity, S; examples)
@@ -22,19 +23,17 @@ function QUBODrivers.test(config!::Function, ::Type{S}; examples::Bool=true) whe
     return nothing
 end
 
-function QUBODrivers.test(config!::Function, S::Type{<:AbstractSampler{T}}; examples::Bool=true) where {T}
+function QUBODrivers.test(config!::Function, ::Type{S}; examples::Bool=true) where {T,S<:AbstractSampler{T}}
     solver_name = MOI.get(S(), MOI.SolverName())
 
     Test.@testset "☢ QUBODrivers' Tests for $(solver_name) ☢" verbose = true begin
         Test.@testset "→ Interface" begin
-            __test_moi_interface(config!, S)
-            __test_automatic_interface(config!, S)
+            _test_moi_interface(config!, S)
+            _test_automatic_interface(config!, S)
         end
 
         if examples
-            Test.@testset "→ Examples" begin
-                __test_basic_examples(config!, S)
-            end
+            _test_examples(config!, S)
         end
     end
 
