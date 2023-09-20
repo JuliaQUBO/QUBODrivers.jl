@@ -1,4 +1,4 @@
-# ~*~ :: MathOptInterface Attributes :: ~*~ #
+# MathOptInterface Attributes
 const MOI_ATTRIBUTE = Union{
     MOI.Name,
     MOI.Silent,
@@ -103,12 +103,12 @@ function MOI.set(
 end
 
 # VariablePrimalStart
-function MOI.get(sampler::AutomaticSampler{T}, attr::MOI.VariablePrimalStart, vi::VI) where {T}
+function MOI.get(sampler::AbstractSampler{T}, attr::MOI.VariablePrimalStart, vi::VI) where {T}
     return MOI.get(sampler.attr_data.moiattrs, attr, vi)
 end
 
 function MOI.set(
-    sampler::AutomaticSampler{T},
+    sampler::AbstractSampler{T},
     attr::MOI.VariablePrimalStart,
     vi::VI,
     value::Union{T,Nothing},
@@ -118,8 +118,8 @@ function MOI.set(
     return nothing
 end
 
-MOI.supports(::AutomaticSampler, ::MOI.VariablePrimalStart, ::Type{VI}) = true
-MOI.supports(::AutomaticSampler, ::MOI.VariablePrimalStart, ::MOI.VariableIndex) = true
+MOI.supports(::AbstractSampler, ::MOI.VariablePrimalStart, ::Type{VI}) = true
+MOI.supports(::AbstractSampler, ::MOI.VariablePrimalStart, ::MOI.VariableIndex) = true
 
 # ~*~ :: Sampler Attributes :: ~*~ #
 abstract type AbstractSamplerAttribute <: MOI.AbstractOptimizerAttribute end
@@ -167,20 +167,20 @@ end
 # ~*~ :: Automatic Sampler Methods :: ~*~ #
 
 # MOI_ATTRIBUTE
-function MOI.get(sampler::AutomaticSampler, attr::MOI_ATTRIBUTE)
+function MOI.get(sampler::AbstractSampler, attr::MOI_ATTRIBUTE)
     return MOI.get(sampler.attr_data.moiattrs, attr)
 end
 
-function MOI.set(sampler::AutomaticSampler, attr::MOI_ATTRIBUTE, value)
+function MOI.set(sampler::AbstractSampler, attr::MOI_ATTRIBUTE, value)
     MOI.set(sampler.attr_data.moiattrs, attr, value)
 
     return nothing
 end
 
-MOI.supports(sampler::AutomaticSampler, attr::MOI_ATTRIBUTE) = true
+MOI.supports(sampler::AbstractSampler, attr::MOI_ATTRIBUTE) = true
 
 # AbstractSamplerAttribute
-function MOI.get(sampler::AutomaticSampler, attr::AbstractSamplerAttribute)
+function MOI.get(sampler::AbstractSampler, attr::AbstractSamplerAttribute)
     if haskey(sampler.attr_data.optattrs, attr)
         return sampler.attr_data.optattrs[attr].value
     else
@@ -188,7 +188,7 @@ function MOI.get(sampler::AutomaticSampler, attr::AbstractSamplerAttribute)
     end
 end
 
-function MOI.set(sampler::AutomaticSampler, attr::AbstractSamplerAttribute, value)
+function MOI.set(sampler::AbstractSampler, attr::AbstractSamplerAttribute, value)
     if haskey(sampler.attr_data.optattrs, attr)
         sampler.attr_data.optattrs[attr].value = value
     else
@@ -198,12 +198,12 @@ function MOI.set(sampler::AutomaticSampler, attr::AbstractSamplerAttribute, valu
     return nothing
 end
 
-function MOI.supports(sampler::AutomaticSampler, attr::AbstractSamplerAttribute)
+function MOI.supports(sampler::AbstractSampler, attr::AbstractSamplerAttribute)
     return haskey(sampler.attr_data.optattrs, attr)
 end
 
 # RawOptimizerAttribute
-function MOI.get(sampler::AutomaticSampler, raw_attr::MOI.RawOptimizerAttribute)
+function MOI.get(sampler::AbstractSampler, raw_attr::MOI.RawOptimizerAttribute)
     if haskey(sampler.attr_data.rawattrs, raw_attr.name)
         return sampler.attr_data.rawattrs[raw_attr.name].value
     else
@@ -211,7 +211,7 @@ function MOI.get(sampler::AutomaticSampler, raw_attr::MOI.RawOptimizerAttribute)
     end
 end
 
-function MOI.set(sampler::AutomaticSampler, raw_attr::MOI.RawOptimizerAttribute, value)
+function MOI.set(sampler::AbstractSampler, raw_attr::MOI.RawOptimizerAttribute, value)
     if haskey(sampler.attr_data.rawattrs, raw_attr.name)
         sampler.attr_data.rawattrs[raw_attr.name].value = value
     else
@@ -221,6 +221,6 @@ function MOI.set(sampler::AutomaticSampler, raw_attr::MOI.RawOptimizerAttribute,
     return nothing
 end
 
-function MOI.supports(sampler::AutomaticSampler, raw_attr::MOI.RawOptimizerAttribute)
+function MOI.supports(sampler::AbstractSampler, raw_attr::MOI.RawOptimizerAttribute)
     return haskey(sampler.attr_data.rawattrs, raw_attr.name)
 end

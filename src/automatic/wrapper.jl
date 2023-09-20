@@ -1,47 +1,22 @@
-# ~*~ :: QUBOTools :: ~*~ #
-
-# Casting routes i.e. source => target pairs of senses and domains:
-source_sense(sampler::AutomaticSampler) = QUBOTools.sense(sampler.model)
-target_sense(sampler::AutomaticSampler) = sampler.sense
-
-source_domain(sampler::AutomaticSampler) = QUBOTools.domain(sampler.model)
-target_domain(sampler::AutomaticSampler) = sampler.domain
-
-function QUBOTools.backend(sampler::AutomaticSampler)
-    return QUBOTools.cast(
-        source_sense(sampler) => target_sense(sampler),
-        QUBOTools.cast(source_domain(sampler) => target_domain(sampler), sampler.model),
-    )
-end
-
-# This is important to ensure aliasing:
-function QUBOTools.metadata(sampler::AutomaticSampler)
-    return QUBOTools.metadata(sampler.model)
-end
-
-function QUBOTools.warm_start(sampler::AutomaticSampler)
-    return QUBOTools.warm_start(sampler.model)
-end
-
 # ~*~ :: MathOptInterface :: ~*~ #
-function MOI.empty!(sampler::AutomaticSampler)
-    sampler.model = nothing
+function MOI.empty!(sampler::AbstractSampler)
+    sampler = nothing
 
     return sampler
 end
 
-function MOI.is_empty(sampler::AutomaticSampler)
-    return isnothing(sampler.model)
+function MOI.is_empty(sampler::AbstractSampler)
+    return isnothing(sampler)
 end
 
-function MOI.optimize!(sampler::AutomaticSampler)
+function MOI.optimize!(sampler::AbstractSampler)
     return _sample!(sampler)
 end
 
-function MOI.copy_to(sampler::AutomaticSampler{T}, model::MOI.ModelLike) where {T}
+function MOI.copy_to(sampler::AbstractSampler{T}, model::MOI.ModelLike) where {T}
     MOI.empty!(sampler)
 
-    sampler.model = parse_model(T, model)::QUBOTools.Model{VI,T}
+    sampler = parse_model(T, model)::QUBOTools.Model{VI,T}
 
     ws = QUBOTools.warm_start(sampler)::Dict{VI,Int}
 
@@ -63,7 +38,7 @@ function MOI.copy_to(sampler::AutomaticSampler{T}, model::MOI.ModelLike) where {
 end
 
 function MOI.get(
-    sampler::AutomaticSampler,
+    sampler::AbstractSampler,
     st::Union{MOI.PrimalStatus,MOI.DualStatus},
     ::VI,
 )
@@ -76,8 +51,8 @@ function MOI.get(
     end
 end
 
-function MOI.get(sampler::AutomaticSampler, ::MOI.RawStatusString)
-    solution_metadata = QUBOTools.metadata(QUBOTools.sampleset(sampler.model))
+function MOI.get(sampler::AbstractSampler, ::MOI.RawStatusString)
+    solution_metadata = QUBOTools.metadata(QUBOTools.solution(sampler))
 
     if !haskey(solution_metadata, "status")
         return ""
@@ -86,14 +61,14 @@ function MOI.get(sampler::AutomaticSampler, ::MOI.RawStatusString)
     end
 end
 
-MOI.supports(::AutomaticSampler, ::MOI.RawStatusString) = true
+MOI.supports(::AbstractSampler, ::MOI.RawStatusString) = true
 
-function MOI.get(sampler::AutomaticSampler, ::MOI.ResultCount)
-    return length(QUBOTools.sampleset(sampler.model))
+function MOI.get(sampler::AbstractSampler, ::MOI.ResultCount)
+    return length(QUBOTools.solution(sampler))
 end
 
-function MOI.get(sampler::AutomaticSampler, ::MOI.TerminationStatus)
-    ω = QUBOTools.sampleset(sampler.model)
+function MOI.get(sampler::AbstractSampler, ::MOI.TerminationStatus)
+    ω = QUBOTools.solution(sampler)
 
     if isempty(ω)
         if isempty(QUBOTools.metadata(ω))
@@ -109,8 +84,8 @@ function MOI.get(sampler::AutomaticSampler, ::MOI.TerminationStatus)
     end
 end
 
-function MOI.get(sampler::AutomaticSampler{T}, ::MOI.ObjectiveSense) where {T}
-    sense = QUBOTools.sense(sampler.model)
+function MOI.get(sampler::AbstractSampler{T}, ::MOI.ObjectiveSense) where {T}
+    sense = QUBOTools.sense(sampler)
 
     if sense === QUBOTools.Min
         return MOI.MIN_SENSE
@@ -119,111 +94,61 @@ function MOI.get(sampler::AutomaticSampler{T}, ::MOI.ObjectiveSense) where {T}
     end
 end
 
-function MOI.get(sampler::AutomaticSampler, ov::MOI.ObjectiveValue)
-    ω = QUBOTools.sampleset(sampler.model)
+function MOI.get(sampler::AbstractSampler, ov::MOI.ObjectiveValue)
     i = ov.result_index
-    n = length(ω)
+    ω = QUBOTools.solution(sampler)
+    m = length(ω)
 
     if isempty(ω)
         error("Invalid result index '$i'; There are no solutions")
     elseif !(1 <= i <= n)
-        error("Invalid result index '$i'; There are $(n) solutions")
-    end
-
-    if MOI.get(sampler, MOI.ObjectiveSense()) === MOI.MAX_SENSE
-        i = n - i + 1
+        error("Invalid result index '$i'; There are $(m) solutions")
     end
 
     return QUBOTools.value(ω, i)
 end
 
-function MOI.get(sampler::AutomaticSampler, ::MOI.SolveTimeSec)
-    return QUBOTools.effective_time(QUBOTools.sampleset(sampler.model))
+function MOI.get(sampler::AbstractSampler, ::MOI.SolveTimeSec)
+    return QUBOTools.effective_time(QUBOTools.solution(sampler))
 end
 
-function MOI.get(sampler::AutomaticSampler{T}, vp::MOI.VariablePrimal, vi::VI) where {T}
-    ω = QUBOTools.sampleset(sampler.model)
-    n = length(ω)
+function MOI.get(sampler::AbstractSampler{T}, vp::MOI.VariablePrimal, vi::VI) where {T}
     i = vp.result_index
+    ω = QUBOTools.solution(sampler)
+    m = length(ω)
 
     if isempty(ω)
         error("Invalid result index '$i'; There are no solutions")
-    elseif !(1 <= i <= n)
-        error("Invalid result index '$i'; There are $(n) solutions")
+
+        return nothing
+    elseif !(1 <= i <= m)
+        error("Invalid result index '$i'; There are $(m) solutions")
+
+        return nothing
     end
 
-    variable_map = QUBOTools.variable_map(sampler.model)
-
-    if !haskey(variable_map, vi)
-        error("Variable index '$vi' not in model")
-    end
-
-    if MOI.get(sampler, MOI.ObjectiveSense()) === MOI.MAX_SENSE
-        i = n - i + 1
-    end
-
-    j = variable_map[vi]::Integer
+    j = QUBOTools.index(sampler, vi)
     s = QUBOTools.state(ω, i, j)
 
     return convert(T, s)
 end
 
-function MOI.get(sampler::AutomaticSampler, ::MOI.NumberOfVariables)
-    return QUBOTools.domain_size(sampler.model)
-end
-
-function QUBOTools.qubo(sampler::AutomaticSampler, type::Type = Dict)
-    @assert !isnothing(sampler.model)
-
-    n = QUBOTools.domain_size(sampler.model)
-
-    L, Q, α, β = QUBOTools.cast(
-        source_sense(sampler) => target_sense(sampler),
-        # model terms and coefficients
-        QUBOTools.linear_terms(sampler.model),
-        QUBOTools.quadratic_terms(sampler.model),
-        QUBOTools.scale(sampler.model),
-        QUBOTools.offset(sampler.model),
-    )
-
-    L, Q, α, β =
-        QUBOTools.cast(source_domain(sampler) => target_domain(sampler), L, Q, α, β)
-
-    return QUBOTools.qubo(type, n, L, Q, α, β)
-end
-
-function QUBOTools.ising(sampler::AutomaticSampler, type::Type = Dict)
-    @assert !isnothing(sampler.model)
-
-    n = QUBOTools.domain_size(sampler.model)
-
-    L, Q, α, β = QUBOTools.cast(
-        source_sense(sampler) => target_sense(sampler),
-        # model terms and coefficients
-        QUBOTools.linear_terms(sampler.model),
-        QUBOTools.quadratic_terms(sampler.model),
-        QUBOTools.scale(sampler.model),
-        QUBOTools.offset(sampler.model),
-    )
-
-    L, Q, α, β =
-        QUBOTools.cast(source_domain(sampler) => target_domain(sampler), L, Q, α, β)
-
-    return QUBOTools.ising(type, n, L, Q, α, β)
+function MOI.get(sampler::AbstractSampler, ::MOI.NumberOfVariables)
+    return QUBOTools.dimension(sampler)
 end
 
 # ~*~ File IO: Base API ~*~ #
 # function Base.write(
 #     filename::AbstractString,
-#     sampler::AutomaticSampler,
+#     sampler::AbstractSampler,
 #     fmt::QUBOTools.AbstractFormat = QUBOTools.infer_format(filename),
 # )
-#     return QUBOTools.write_model(filename, sampler.model, fmt)
+#     return QUBOTools.write_model(filename, sampler, fmt)
 # end
 
 # function Base.read!(
 #     filename::AbstractString,
-#     sampler::AutomaticSampler,
+#     sampler::AbstractSampler,
 #     fmt::QUBOTools.AbstractFormat = QUBOTools.infer_format(filename),
 # )
 #     sampler.source = QUBOTools.read_model(filename, fmt)
@@ -232,7 +157,7 @@ end
 #     return sampler
 # end
 
-function warm_start(sampler::AutomaticSampler, i::Integer)
+function warm_start(sampler::AbstractSampler, i::Integer)
     v = QUBOTools.variable_inv(sampler, i)
     x = MOI.get(sampler, MOI.VariablePrimalStart(), v)
 
@@ -246,7 +171,7 @@ function warm_start(sampler::AutomaticSampler, i::Integer)
     end
 end
 
-function warm_start(sampler::AutomaticSampler{T}) where {T}
+function warm_start(sampler::AbstractSampler{T}) where {T}
     n = MOI.get(sampler, MOI.NumberOfVariables())
     s = sizehint!(Dict{Int,Int}(), n)
 
