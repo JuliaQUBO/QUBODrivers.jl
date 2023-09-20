@@ -23,7 +23,34 @@ function test_setup_spec_parser()
         end
     end
 
-    @show spec
+    @test spec == QUBODrivers._SamplerSpec(;
+        id      = :Optimizer,
+        name    = "Super Sampler",
+        version = v"1.2.3",
+        attributes = [
+            QUBODrivers._AttrSpec(;
+                opt_attr = :SuperAttribute,
+                raw_attr = "super_attr",
+                val_type = :(Union{Integer,Nothing}),
+                default  = quote nothing end,
+            ),
+            QUBODrivers._AttrSpec(;
+                opt_attr = :UltraAttribute,
+                raw_attr = "ultra_attr",
+                val_type = :(Union{String,Nothing}),
+                default  = "",
+            ),
+            QUBODrivers._AttrSpec(;
+                opt_attr = :MegaAttribute,
+                default  = :((1, 2, 3)),
+            ),
+            QUBODrivers._AttrSpec(;
+                raw_attr = "simple_attr",
+                val_type = :(Float64),
+                default  = 1.2,
+            ),
+        ]
+    )
 
     return nothing
 end

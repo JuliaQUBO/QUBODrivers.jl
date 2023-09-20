@@ -127,11 +127,9 @@ function __setup_parse_block(block; id = :Optimizer)
 end
 
 function __setup_parse_attr(stmt)
-    return nothing
-    
     opt_attr = nothing
     raw_attr = nothing
-    val_type = nothing
+    val_type = :Any
     default  = nothing
 
     if stmt isa LineNumberNode
@@ -140,66 +138,79 @@ function __setup_parse_attr(stmt)
         setup_error(
             "Each attribute definition must be an assignment to a default value ($stmt)",
         )
+
+        return nothing
     end
 
     attr, default = stmt.args
 
-    type    = nothing
-    optattr = nothing
-    rawattr = nothing
-
     if attr isa Symbol # ~ MOI attribute only
         if !(Base.isidentifier(attr))
-            setup_error("attribute identifier '$attr' is not a valid one")
+            setup_error("attribute identifier '$attr' is not valid")
+
+            return nothing
         end
 
-        optattr = attr
+        opt_attr = attr
     elseif attr isa String # ~ Raw attribute only
-        rawattr = attr
+        if isempty(attr)
+            setup_error("raw attribute key can't be an empty string")
+
+            return nothing
+        end
+
+        raw_attr = attr
     elseif attr isa Expr && attr.head === :(::)
-        attr, type = attr.args
+        attr, val_type = attr.args
 
         if attr isa Symbol
             if !(Base.isidentifier(attr))
                 setup_error("attribute identifier '$attr' is not a valid one")
+
+                return nothing
             end
 
-            optattr = attr
+            opt_attr = attr
         elseif attr isa String
-            rawattr = attr
+            raw_attr = attr
         elseif attr isa Expr && (attr.head === :ref || attr.head === :call)
-            optattr, rawattr = attr.args
+            opt_attr, raw_attr = attr.args
 
-            if optattr isa Symbol && rawattr isa String
-                if !(Base.isidentifier(optattr))
-                    setup_error("attribute identifier '$optattr' is not a valid one")
+            if opt_attr isa Symbol && raw_attr isa String
+                if !(Base.isidentifier(opt_attr))
+                    setup_error("attribute identifier '$opt_attr' is not a valid one")
+
+                    return nothing
                 end
             else
                 setup_error("invalid attribute identifier '$name($raw)'")
+
+                return nothing
             end
         else
             setup_error("invalid attribute identifier '$attr'")
+
+            return nothing
         end
     elseif attr isa Expr && (attr.head === :ref || attr.head === :call)
-        optattr, rawattr = attr.args
+        opt_attr, raw_attr = attr.args
 
-        if optattr isa Symbol && rawattr isa String
-            if !(Base.isidentifier(optattr))
-                setup_error("attribute identifier '$optattr' is not a valid one")
+        if opt_attr isa Symbol && raw_attr isa String
+            if !(Base.isidentifier(opt_attr))
+                setup_error("attribute identifier '$opt_attr' is not a valid one")
+
+                return nothing
             end
         else
-            setup_error("invalid attribute identifier '$name[$rawattr]'")
+            setup_error("invalid attribute identifier '$name[$raw_attr]'")
+
+            return nothing
         end
     else
         setup_error("invalid attribute signature '$attr'")
+
+        return nothing
     end
 
-    return Dict{Symbol,Any}(
-        :type    => type,
-        :default => default,
-        :optattr => optattr,
-        :rawattr => rawattr,
-    )
-
-    return _AttrSpec
+    return _AttrSpec(; opt_attr, raw_attr, val_type, default)
 end
