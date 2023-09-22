@@ -7,7 +7,7 @@ abstract type SamplerAttribute <: MOI.AbstractOptimizerAttribute end
     RawSamplerAttribute{key}
 """
 struct RawSamplerAttribute{key} <: SamplerAttribute
-    RawSamplerAttribute{key}() = new{key}()
+    RawSamplerAttribute{key}() where {key} = new{key}()
 end
 
 RawSamplerAttribute(key::String) = RawSamplerAttribute{Symbol(key)}()
@@ -16,7 +16,7 @@ RawSamplerAttribute(key::String) = RawSamplerAttribute{Symbol(key)}()
     @raw_attr_str
 """
 macro raw_attr_str(key::String)
-    return :(RawSamplerAttribute{$(esc(Symbol(key)))})
+    return :(RawSamplerAttribute{$(esc(QuoteNode(Symbol(key))))})
 end
 
 @doc raw"""

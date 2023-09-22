@@ -123,6 +123,20 @@ function __setup_parse_block(block; id = :Optimizer)
         end
     end
 
+    if isnothing(name)
+        setup_error("'name' entry is missing")
+
+        return nothing
+    end
+
+    if isnothing(version)
+        version = v"0.0.0"
+    end
+
+    if isnothing(attributes)
+        attributes = _AttrSpec[]
+    end
+
     return _SamplerSpec(; id, name, version, attributes)
 end
 
@@ -146,7 +160,7 @@ function __setup_parse_attr(stmt)
 
     if attr isa Symbol # ~ MOI attribute only
         if !(Base.isidentifier(attr))
-            setup_error("attribute identifier '$attr' is not valid")
+            setup_error("Attribute identifier '$attr' is not valid")
 
             return nothing
         end
@@ -154,7 +168,7 @@ function __setup_parse_attr(stmt)
         opt_attr = attr
     elseif attr isa String # ~ Raw attribute only
         if isempty(attr)
-            setup_error("raw attribute key can't be an empty string")
+            setup_error("Raw attribute key can't be an empty string")
 
             return nothing
         end
@@ -165,7 +179,7 @@ function __setup_parse_attr(stmt)
 
         if attr isa Symbol
             if !(Base.isidentifier(attr))
-                setup_error("attribute identifier '$attr' is not a valid one")
+                setup_error("Attribute identifier '$attr' is not a valid one")
 
                 return nothing
             end
@@ -178,17 +192,17 @@ function __setup_parse_attr(stmt)
 
             if opt_attr isa Symbol && raw_attr isa String
                 if !(Base.isidentifier(opt_attr))
-                    setup_error("attribute identifier '$opt_attr' is not a valid one")
+                    setup_error("Attribute identifier '$opt_attr' is not a valid one")
 
                     return nothing
                 end
             else
-                setup_error("invalid attribute identifier '$name($raw)'")
+                setup_error("Invalid attribute identifier '$name($raw)'")
 
                 return nothing
             end
         else
-            setup_error("invalid attribute identifier '$attr'")
+            setup_error("Invalid attribute identifier '$attr'")
 
             return nothing
         end
@@ -197,19 +211,27 @@ function __setup_parse_attr(stmt)
 
         if opt_attr isa Symbol && raw_attr isa String
             if !(Base.isidentifier(opt_attr))
-                setup_error("attribute identifier '$opt_attr' is not a valid one")
+                setup_error("Attribute identifier '$opt_attr' is not a valid one")
 
                 return nothing
             end
         else
-            setup_error("invalid attribute identifier '$name[$raw_attr]'")
+            setup_error("Invalid attribute identifier '$name[$raw_attr]'")
 
             return nothing
         end
     else
-        setup_error("invalid attribute signature '$attr'")
+        setup_error("Invalid attribute signature '$attr'")
 
         return nothing
+    end
+
+    if !isnothing(raw_attr)
+        if startswith(raw_attr, "□/")
+            setup_error("Raw attributes starting with '□/' are reserved for internal use")
+        elseif startswith(raw_attr, "moi/")
+            setup_error("Raw attributes starting with 'moi/' are reserved for internal use")
+        end
     end
 
     return _AttrSpec(; opt_attr, raw_attr, val_type, default)

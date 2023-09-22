@@ -7,11 +7,17 @@ struct _AttrSpec
 
     function _AttrSpec(;
         opt_attr::Union{Symbol,Nothing} = nothing,
-        raw_attr::String,
+        raw_attr::Union{String,Nothing} = nothing,
         val_type::Union{Symbol,Expr}    = :Any,
         default::Any,
     )
-        @assert !isempty(raw_attr)
+        @assert !isnothing(opt_attr) || !isnothing(raw_attr)
+
+        if isnothing(raw_attr)
+            raw_attr = "□/$(opt_attr)"
+        else
+            @assert !isempty(raw_attr)
+        end
 
         Base.remove_linenums!(val_type)
         Base.remove_linenums!(default)

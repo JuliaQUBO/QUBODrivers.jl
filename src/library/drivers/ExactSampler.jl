@@ -1,7 +1,8 @@
 module ExactSampler
 
 import QUBOTools
-import QUBODrivers: MOI, Sample, SampleSet, qubo
+import QUBODrivers
+import QUBODrivers: MOI, Sample, SampleSet
 
 @doc raw"""
     ExactSampler.Optimizer{T}
@@ -20,7 +21,7 @@ sample_state(i::Integer, n::Integer) = digits(Int, i - 1; base = 2, pad = n)
 
 function QUBODrivers.sample(sampler::Optimizer{T}) where {T}
     # Retrieve Model
-    n, L, Q, α, β = qubo(sampler, :sparse; sense = :min)
+    n, L, Q, α, β = QUBOTools.qubo(sampler, :sparse; sense = :min)
 
     # Retrieve Attributes
     m = 2^n

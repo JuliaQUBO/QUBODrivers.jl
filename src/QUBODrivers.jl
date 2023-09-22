@@ -16,6 +16,7 @@ const Spin = QUBOTools.__moi_spin_set()
 export MOI, Sample, SampleSet, Spin, qubo, ising, ↑, ↓
 
 include("interface/sampler.jl")
+include("interface/attributes.jl")
 
 include("library/wrappers/moi.jl")
 include("library/wrappers/qubotools.jl")
@@ -23,16 +24,15 @@ include("library/wrappers/qubotools.jl")
 # include("library/test/test.jl")
 
 include("library/setup/error.jl")
-include("library/setup/attrs.jl")
 include("library/setup/specs.jl")
 include("library/setup/parse.jl")
 include("library/setup/quote.jl")
 include("library/setup/macro.jl")
 
-# export ExactSampler, IdentitySampler, RandomSampler
+export ExactSampler, IdentitySampler, RandomSampler
 
-# include("library/drivers/ExactSampler.jl")
-# include("library/drivers/IdentitySampler.jl")
-# include("library/drivers/RandomSampler.jl")
+include("library/drivers/ExactSampler.jl")
+include("library/drivers/IdentitySampler.jl")
+include("library/drivers/RandomSampler.jl")
 
 end # module QUBODrivers

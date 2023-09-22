@@ -1,7 +1,8 @@
 module IdentitySampler
 
 import QUBOTools
-import QUBODrivers: MOI, Sample, SampleSet, @setup, sample, qubo, start
+import QUBODrivers
+import QUBODrivers: MOI, Sample, SampleSet
 
 @doc raw"""
     IdentitySampler.Optimizer{T}
@@ -18,7 +19,7 @@ end
 
 function sample(sampler::Optimizer{T}) where {T}
     # Retrieve Model
-    n, L, Q, α, β = qubo(sampler, :dict; sense = :min)
+    n, L, Q, α, β = QUBOTools.qubo(sampler, :dict; sense = :min)
 
     # Retrieve warm-start state
     samples = Vector{Sample{T,Int}}(undef, 1)

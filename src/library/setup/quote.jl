@@ -4,15 +4,12 @@ function __setup_quote(spec::_SamplerSpec)
     OptimizerVersion = esc(spec.version)
 
     return quote
-        mutable struct $(Optimizer){T} <: QUBODrivers.AbstractSampler{T}
+        Base.@__doc__ mutable struct $(Optimizer){T} <: QUBODrivers.AbstractSampler{T}
             model::QUBOTools.Model{VI,T,Int}
             attributes::Dict{Symbol,Any}
 
             function $(Optimizer){T}() where {T}
-                return new{T}(
-                    QUBOTools.Model{VI,T,Int}(),
-                    Dict{Symbol,Any}(),
-                )
+                return new{T}(QUBOTools.Model{VI,T,Int}(), Dict{Symbol,Any}())
             end
         end
 
@@ -22,30 +19,37 @@ function __setup_quote(spec::_SamplerSpec)
 
         # Attributes - get
         function MOI.get(sampler::$(Optimizer), attr::MOI.RawOptimizerAttribute)
-            return MOI.get(sampler, RawSamplerAttribute(attr.value))
+            return MOI.get(sampler, QUBODrivers.RawSamplerAttribute(attr.name))
         end
 
-        function MOI.get(sampler::$(Optimizer), attr::RawSamplerAttribute)
+        function MOI.get(sampler::$(Optimizer), attr::QUBODrivers.RawSamplerAttribute)
             return QUBODrivers.get_raw_attr(sampler, attr)
         end
 
         # Attributes - set
         function MOI.set(sampler::$(Optimizer), attr::MOI.RawOptimizerAttribute, value::Any)
-            return MOI.set(sampler, RawSamplerAttribute(attr.value), value)
+            return MOI.set(sampler, QUBODrivers.RawSamplerAttribute(attr.name), value)
         end
 
-        function MOI.set(sampler::$(Optimizer), attr::RawSamplerAttribute, value::Any)
+        function MOI.set(
+            sampler::$(Optimizer),
+            attr::QUBODrivers.RawSamplerAttribute,
+            value::Any,
+        )
             QUBODrivers.set_raw_attr!(sampler, attr, value)
 
             return nothing
         end
 
         # Attributes - support
-        function MOI.supports(sampler::$(Optimizer), attr::RawOptimizerAttribute)::Bool
-            return MOI.supports(sampler::$(Optimizer), RawSamplerAttribute(attr.value))
+        function MOI.supports(sampler::$(Optimizer), attr::MOI.RawOptimizerAttribute)::Bool
+            return MOI.supports(
+                sampler::$(Optimizer),
+                QUBODrivers.RawSamplerAttribute(attr.name),
+            )
         end
 
-        function MOI.supports(sampler::$(Optimizer), attr::RawSamplerAttribute)::Bool
+        function MOI.supports(sampler::$(Optimizer), attr::QUBODrivers.RawSamplerAttribute)
             return false
         end
 
@@ -56,15 +60,16 @@ end
 
 function __setup_quote_attribute(spec::_SamplerSpec, attr_spec::_AttrSpec)
     Optimizer = esc(spec.id)
-    attr_key  = Symbol(attr_spec.raw_attr)
-    attr_type = RawSamplerAttribute{attr_key}
+    attr_name = Symbol(attr_spec.raw_attr)
+    attr_key  = QuoteNode(attr_name)
+    attr_type = RawSamplerAttribute{attr_name}
     attr      = attr_type()
     default   = esc(attr_spec.default)
     val_type  = esc(attr_spec.val_type)
 
     attr_code = quote
         # Attributes - get
-        function QUBODrivers.get_raw_attr(sampler::$(Optimizer), ::attr_type)
+        function QUBODrivers.get_raw_attr(sampler::$(Optimizer), ::$(attr_type))
             if haskey(sampler.attributes, $(attr_key))
                 return sampler.attributes[$(attr_key)]
             else
@@ -73,19 +78,23 @@ function __setup_quote_attribute(spec::_SamplerSpec, attr_spec::_AttrSpec)
         end
 
         # Attributes - set
-        function QUBODrivers.set_raw_attr!(sampler::$(Optimizer), ::attr_type, value) where {key}
+        function QUBODrivers.set_raw_attr!(
+            sampler::$(Optimizer),
+            ::$(attr_type),
+            value,
+        )
             sampler.attributes[$(attr_key)] = convert($(val_type), value)
-            
+
             return nothing
         end
 
         # Attributes - default
-        function QUBODrivers.default_raw_attr(sampler::$(Optimizer), ::attr_type)
+        function QUBODrivers.default_raw_attr(sampler::$(Optimizer), ::$(attr_type))
             return $(default)::$(val_type)
         end
 
         # Attributes - support
-        function MOI.supports(sampler::$(Optimizer), ::attr_type)
+        function MOI.supports(sampler::$(Optimizer), ::$(attr_type))
             return true
         end
     end
@@ -99,55 +108,20 @@ function __setup_quote_attribute(spec::_SamplerSpec, attr_spec::_AttrSpec)
             struct $(Attribute) <: QUBODrivers.SamplerAttribute end
 
             function MOI.get(sampler::$(Optimizer), ::$(Attribute))
-                return MOI.get(sampler, $(attr_type()))
+                return MOI.get(sampler, $(attr))
             end
 
-            function MOI.set(sampler::$(Optimizer), ::$(Attribute), value::val_type)
-                MOI.set(sampler, $(attr_type()), value)
+            function MOI.set(sampler::$(Optimizer), ::$(Attribute), value)
+                MOI.set(sampler, $(attr), value)
 
                 return nothing
+            end
+
+            function MOI.supports(sampler::$(Optimizer), ::$(Attribute))
+                return true
             end
         end
     else
         return attr_code
     end
 end
-
-    # if !isnothing(opt_attr) && !isnothing(raw_attr)
-    #     return quote
-    #         struct $(esc(opt_attr)) <: QUBODrivers.AbstractSamplerAttribute end
-
-    #         push!(
-    #             __ATTRIBUTES,
-    #             QUBODrivers.AttributeWrapper{$(esc(opt_attr)),$(esc(val_type))}(
-    #                 $(esc(default));
-    #                 raw_attr = $(esc(raw_attr)),
-    #                 opt_attr = $(esc(opt_attr))(),
-    #             ),
-    #         )
-    #     end
-    # elseif !isnothing(opt_attr)
-    #     return quote
-    #         struct $(esc(opt_attr)) <: QUBODrivers.AbstractSamplerAttribute end
-
-    #         push!(
-    #             __ATTRIBUTES,
-    #             QUBODrivers.AttributeWrapper{$(esc(opt_attr)),$(esc(val_type))}(
-    #                 $(esc(default));
-    #                 opt_attr = $(esc(opt_attr))(),
-    #             ),
-    #         )
-    #     end
-    # elseif !isnothing(raw_attr)
-    #     return quote
-    #         push!(
-    #             __ATTRIBUTES,
-    #             QUBODrivers.AttributeWrapper{Nothing,$(esc(val_type))}(
-    #                 $(esc(default));
-    #                 raw_attr = $(esc(raw_attr)),
-    #             ),
-    #         )
-    #     end
-    # else
-    #     error("Looks like some assertions were skipped. Did you turn any optimizations on?")
-    # end    

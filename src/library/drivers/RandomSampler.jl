@@ -1,21 +1,10 @@
 module RandomSampler
 
 import QUBOTools
-import QUBODrivers: MOI, Sample, SampleSet, @setup, sample, qubo
+import QUBODrivers
+import QUBODrivers: MOI, Sample, SampleSet
 
 using Random
-
-@setup Optimizer begin
-    name       = "Random Sampler"
-    sense      = :min
-    domain     = :bool
-    version    = v"0.6.0"
-    attributes = begin
-        RandomSeed["seed"]::Union{Integer,Nothing} = nothing
-        NumberOfReads["num_reads"]::Integer        = 1_000
-        RandomGenerator["rng"]::AbstractRNG        = Random.GLOBAL_RNG
-    end
-end
 
 @doc raw"""
     RandomSampler.Optimizer{T}
@@ -24,19 +13,27 @@ end
 - `RandomSeed`, `"seed"`: Random seed to initialize the random number generator.
 - `NumberOfReads`, `"num_reads"`: Number of random states sampled per run.
 - `RandomGenerator`, `"rng"`: Random Number Generator instance.
-""" Optimizer
+"""
+QUBODrivers.@setup Optimizer begin
+    name       = "Random Sampler"
+    version    = v"0.3.0"
+    attributes = begin
+        RandomSeed["seed"]::Union{Integer,Nothing} = nothing
+        NumberOfReads["num_reads"]::Integer        = 1_000
+        RandomGenerator["rng"]::AbstractRNG        = Random.GLOBAL_RNG
+    end
+end
 
 sample_state(rng::AbstractRNG, n::Integer) = rand(rng, (0, 1), n)
 
-function sample(sampler::Optimizer{T}) where {T}
+function QUBODrivers.sample(sampler::Optimizer{T}) where {T}
     # Retrieve Model
-    Q, α, β = qubo(sampler, Dict)
+    n, L, Q, α, β = qubo(sampler, :dict; sense = :min)
 
     # Retrieve Attributes
-    n         = MOI.get(sampler, MOI.NumberOfVariables())
-    num_reads = MOI.get(sampler, RandomSampler.NumberOfReads())
-    seed      = MOI.get(sampler, RandomSampler.RandomSeed())
-    rng       = MOI.get(sampler, RandomSampler.RandomGenerator())
+    num_reads = MOI.get(sampler, NumberOfReads())
+    seed      = MOI.get(sampler, RandomSeed())
+    rng       = MOI.get(sampler, RandomGenerator())
 
     # Validate Input
     @assert num_reads >= 0
@@ -50,7 +47,7 @@ function sample(sampler::Optimizer{T}) where {T}
     samples = Vector{Sample{T,Int}}(undef, num_reads)
     results = @timed for i = 1:num_reads
         ψ = sample_state(rng, n)
-        λ = QUBOTools.value(Q, ψ, α, β)
+        λ = QUBOTools.value(L, Q, ψ, α, β)
 
         samples[i] = Sample{T,Int}(ψ, λ)
     end
@@ -61,7 +58,7 @@ function sample(sampler::Optimizer{T}) where {T}
         "time"   => Dict{String,Any}("effective" => results.time),
     )
 
-    return SampleSet{T}(samples, metadata)
+    return SampleSet{T}(samples, metadata; sense = :min, domain = :bool)
 end
 
 end # module

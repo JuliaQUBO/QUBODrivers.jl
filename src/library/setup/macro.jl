@@ -3,7 +3,7 @@
 
 The `@setup` macro receives a `begin ... end` block with an attribute definition on each of the block's statements.
 
-## Attributes
+## Sampler Attributes
 
 All attributes must be presented as an assignment to the default value of that attribute.
 To create a MathOptInterface optimizer attribute, an identifier must be present on the left hand side.
@@ -13,6 +13,8 @@ In the special case where an attribute could be accessed in both ways, the ident
 For example, a list of the valid syntax variations for the *number of reads* attribute follows:
     - `"num_reads" = 1_000`
     - `"num_reads"::Integer = 1_000`
+    - `NumberOfReads = 1_000`
+    - `NumberOfReads::Integer = 1_000`
     - `NumberOfReads("num_reads") = 1_000`
     - `NumberOfReads("num_reads")::Integer = 1_000`
 
@@ -20,11 +22,12 @@ For example, a list of the valid syntax variations for the *number of reads* att
 
 ```
 QUBODrivers.@setup Optimizer begin
-    name    = "Super Sampler"
-    version = v"1.0.2"
+    name       = "Super Sampler"
+    version    = v"1.0.2"
     attributes = begin
-        NumberOfReads["num_reads"]::Integer = 1_000
-        SuperAttribute["super_attr"] = nothing
+        NumberOfReads["num_reads"]::Integer  = 1_000
+        SuperAttribute["super_attr"]         = nothing
+        MegaAttribute::Union{String,Nothing} = "mega"
     end
 end
 ```
