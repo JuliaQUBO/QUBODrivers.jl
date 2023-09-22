@@ -8,8 +8,10 @@ include("setup/setup.jl")
 # include("drivers/sampler_bundle.jl")
 
 function main()
-    test_setup_macro()
-    # test_sampler_bundle()
+    @testset "QUBODrivers.jl Test Suite" verbose = true begin
+        test_setup_macro()
+        # test_sampler_bundle()
+    end
 
     return nothing
 end

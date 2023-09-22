@@ -1,11 +1,14 @@
 # A new Sampler
+
 This guide aims to provide a tutorial on how to implement new sampler interfaces using [QUBODrivers.jl](https://github.com/psrenergy/QUBODrivers.jl).
 
 ## The `@setup` macro
+
 Using the [`QUBODrivers.@setup`](@ref setup-macro) macro is the most straightforward way to get your sampler running right now.
 Apart from the macro call it is needed to implement the [`QUBODrivers.sample`](@ref) method.
 
 ### I. Imports
+
 First of all, we are going to import both `QUBODrivers.jl` and also `MathOptInterface.jl`, commonly aliased as `MOI`.
 ```julia
 import QUBODrivers

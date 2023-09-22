@@ -1,10 +1,12 @@
 # Manual
 
 ## Introduction
+
 The core idea behind this package is to provide a toolbox for developing and integrating [QUBO](https://en.wikipedia.org/wiki/Quadratic_unconstrained_binary_optimization) sampling tools with the [JuMP](https://jump.dev) mathematical programming environment.
 Appart from the few couple exported utility engines, QUBODrivers.jl is inherently about extensions, which is achieved by implementing most of the [MOI](https://jump.dev/MathOptInterface.jl) requirements, leaving only the essential for the developer.
 
 ### QUBO
+
 An optimization problem is in its QUBO form if it is written as
 
 ```math
@@ -22,6 +24,7 @@ It is worth taking a look at [QUBOTool's docs](https://psrenergy.github.io/QUBOT
 ## Defining a new sampler interface
 
 ### Showcase
+
 Before explaining in detail how to use this package, it's good to list a few examples for the reader to grasp.
 Below, there are links to the files where the actual interfaces are implemented, including thin wrappers, interfacing with Python and Julia implementations of common algorithms and heuristics.
 
@@ -47,94 +50,114 @@ The second and last step is to define the `QUBODrivers.sample(::Optimizer)` meth
 Using it might be somehow restrictive in comparison to the regular [JuMP/MOI Solver Interface workflow](https://jump.dev/MathOptInterface.jl/stable/tutorials/implementing/).
 Yet, our guess is that most of this package's users are not considering going deeper into the MOI internals that soon.
 
-### [`@setup`](@ref setup-macro) example
+### @setup example
+
 The following example is intended to illustrate the usage of the macro, showing how simple it should be to implement a wrapper for a sampler implemented in another language such as C or C++.
 
 ```julia
 module SuperSampler
-    using QUBODrivers
 
-    QUBODrivers.@setup Optimizer begin
-        name    = "Super Sampler"
-        sense   = :max
-        domain  = :spin
-        version = v"1.0.2"
-        attributes = begin
-            SuperAttribute::String = "super"
-            NumberOfReads["num_reads"]::Integer = 1_000
-        end
-    end
+import QUBODrivers
+import QUBODrivers: QUBOTools
+import QUBODrivers: @raw_attr_str
 
-    model = Model(SuperSampler.Optimizer)
+import MathOptInterface as MOI
 
-    @variable(model, x[1:n], Bin)
-    @objective(model, Min, x' * Q * x)
-
-    function QUBODrivers.sample(sampler::Optimizer{T}) where {T}
-        # ~ Is your annealer running on the Ising Model? Have this:
-        h, J, u, v = QUBODrivers.ising(
-            sampler,
-            Vector, # Here we opt for a sparse, vector representation
-        )
-
-        n = MOI.get(sampler, MOI.NumberOfVariables())
-
-        # ~ Retrieve Attributes ~ #
-        num_reads = MOI.get(sampler, NumberOfReads())
-        @assert num_reads > 0
-
-        super_attr = MOI.get(sampler, SuperAttribute())
-        @assert super_attr ∈ ("super", "ultra", "mega")    
-
-        # ~*~ Timing Information ~*~ #
-        time_data = Dict{String,Any}()
-
-        # ~*~ Run Algorithm ~*~ #
-        result = @timed Vector{Int}[
-            super_sample(h, J, u, v; attr=super_attr)
-            for _ = 1:num_reads
-        ]
-        states = result.value
-
-        # ~*~ Record Time ~*~ #
-        time_data["effective"] = result.time
-
-        metadata = Dict{String,Any}(
-            "time"   => time_data,
-            "origin" => "Super Sampling method"
-        )
-
-        # ~ Here some magic happens:
-        #   By providing the sampler and a vector of states,
-        #   QUBODrivers.jl computes the energy and organizes your
-        #   solutions automatically, following the variable
-        #   domain conventions specified previously.
-        return QUBODrivers.SampleSet{T}(sampler, states, metadata)
-    end
-
-    function super_sample(h, J, u, v; super_attr, kws...)
-        return ccall(
-            :super_sample,
-            Vector{Int},
-            (
-                Ptr{Cdouble},
-                Ptr{Cdouble},
-                Ptr{Cdouble},
-                Ptr{Cdouble},
-                Cint,
-                Cstring,
-            ),
-            h,
-            J,
-            u,
-            v,
-            super_attr,
-        )
+QUBODrivers.@setup Optimizer begin
+    name    = "Super Sampler"
+    version = v"1.0.2"
+    attributes = begin
+        NumberOfReads["num_reads"]::Integer  = 100_000
+        SuperAttribute["super_attr"]::String = "super"
     end
 end
+
+function MOI.set(sampler::Optimizer, attr::raw_attr"", value)
+    if !(value isa Integer)
+        error("'num_reads' must be an integer")
+    else
+        QUBODrivers.set_raw_attr!(sampler, attr, value)
+    end
+
+    return nothing
+end
+
+function MOI.set(sampler::Optimizer, attr::raw_attr"super_attr", value)
+    if !(value isa AbstractString)
+        error("'super_attr' must be a string")
+    elseif !(value ∈ ("super", "ultra", "mega"))
+        error("'super_attr' must be one of the following: 'super', 'ultra', 'mega'")
+    else
+        QUBODrivers.set_raw_attr!(sampler, attr, value)
+    end
+
+    return nothing
+end
+
+function QUBODrivers.sample(sampler::Optimizer{T}) where {T}
+    # ~ Is your annealer running on the Ising Model? Have this:
+    n, h, J, α, β = QUBOTools.ising(
+        sampler,
+        :dense; # Here we opt for a dense matrix representation
+        sense  = :max,
+        domain = :spin,
+    )
+
+    # ~ Retrieve Attributes ~ #
+    num_reads  = MOI.get(sampler, NumberOfReads())
+    super_attr = MOI.get(sampler, SuperAttribute())
+
+    # ~*~ Run Algorithm ~*~ #
+    samples = QUBOTools.Sample{Float64,Int}[]
+
+    clock = @timed for _ = 1:num_reads
+        ψ = super_sample(h, J; attr=super_attr)
+        λ = QUBOTools.value(h, J, ψ, α, β)
+        s = QUBOTools.Sample(ψ, λ)
+
+        push!(samples, s)
+    end
+
+    # ~*~ Write Metadata ~*~ #
+    metadata = Dict{String,Any}(
+        "origin" => "Super Sampling method",
+        "time"   => Dict{String,Any}(
+            "effective" => clock.time,
+        ),
+    )
+
+    # Here some magic happens: by providing a vector of samples, QUBOTools.jl
+    # organizes your solutions automatically, following the sense and domain
+    # conventions specified previously.
+    return QUBOTools.SampleSet{T}(
+        samples,
+        metadata;
+        sense  = :max,
+        domain = :spin,
+    )
+end
+
+function super_sample(h, J; super_attr = "super")
+    return ccall(
+        :super_sample,
+        Vector{Int},
+        (
+            Ptr{Cdouble},
+            Ptr{Ptr{Cdouble}},
+            Cint,
+            Cstring,
+        ),
+        h,
+        J,
+        super_attr,
+    )
+end
+
+end # module SuperSampler
 ```
 
 ### Walkthrough
+
 Now, it's time to go through the example in greater detail.
 First of all, the entire work must be done within a module.
 
@@ -198,6 +221,7 @@ version = v"1.0.2"
 # Model Mapping
 
 # Automatic Tests
+
 ```@docs
 QUBODrivers.test
 ```

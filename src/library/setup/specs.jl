@@ -1,17 +1,17 @@
 # Specifications to be extracted from macro call
 struct _AttrSpec
     opt_attr::Union{Symbol,Nothing}
-    raw_attr::Union{String,Nothing}
+    raw_attr::String
     val_type::Any
     default::Any
 
     function _AttrSpec(;
         opt_attr::Union{Symbol,Nothing} = nothing,
-        raw_attr::Union{String,Nothing} = nothing,
+        raw_attr::String,
         val_type::Union{Symbol,Expr}    = :Any,
         default::Any,
     )
-        @assert !isnothing(opt_attr) || !isnothing(raw_attr)
+        @assert !isempty(raw_attr)
 
         Base.remove_linenums!(val_type)
         Base.remove_linenums!(default)

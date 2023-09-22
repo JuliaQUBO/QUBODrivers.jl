@@ -19,9 +19,14 @@ makedocs(;
     authors = "Pedro Xavier and Pedro Ripper and Tiago Andrade and Joaquim Garcia and David Bernal",
     pages = [
         "Home" => "index.md",
-        # "Manual" => "manual.md",
+        "Manual" => "manual.md",
         # "Examples" => "examples.md",
         # "Samplers" => "samplers.md",
+        "Booklet" => [
+            "Itroduction"       => "booklet/1-intro.md",
+            "Sampler Interface" => "booklet/2-interface.md",
+            "Attribute System"  => "booklet/3-attributes.md",
+        ],
     ],
     workdir = @__DIR__,
 )
@@ -29,5 +34,5 @@ makedocs(;
 if "--skip-deploy" ∈ ARGS
     @warn "Skipping deployment"
 else
-    deploydocs(repo = raw"github.com/psrenergy/QUBODrivers.jl.git", push_preview = true)
+    deploydocs(; repo = raw"github.com/psrenergy/QUBODrivers.jl.git", push_preview = true)
 end

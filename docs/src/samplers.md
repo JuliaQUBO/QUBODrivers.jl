@@ -1,6 +1,7 @@
 # Samplers
 
 ## [Abstract Sampler](@id abstract-sampler)
+
 ```@docs
 QUBODrivers.AbstractSampler
 ```

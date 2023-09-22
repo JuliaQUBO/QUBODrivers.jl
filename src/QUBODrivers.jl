@@ -23,6 +23,7 @@ include("library/wrappers/qubotools.jl")
 # include("library/test/test.jl")
 
 include("library/setup/error.jl")
+include("library/setup/attrs.jl")
 include("library/setup/specs.jl")
 include("library/setup/parse.jl")
 include("library/setup/quote.jl")
