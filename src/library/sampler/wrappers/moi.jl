@@ -34,10 +34,10 @@ MOI.get(sampler::AbstractSampler, ::MOI.RawSolver) = sampler
 
 # Since problems are unconstrained, all available solutions are feasible.
 function MOI.get(sampler::AbstractSampler, ps::MOI.PrimalStatus)
-    n = MOI.get(sampler, MOI.ResultCount())
+    m = MOI.get(sampler, MOI.ResultCount())
     i = ps.result_index
 
-    if 1 <= i <= n
+    if 1 <= i <= m
         return MOI.FEASIBLE_POINT
     else
         return MOI.NO_SOLUTION
@@ -47,65 +47,33 @@ end
 # No constraints, no dual solutions
 MOI.get(::AbstractSampler, ::MOI.DualStatus) = MOI.NO_SOLUTION
 
-const MOI_ATTRIBUTE = Union{
-    MOI.Name,
-    MOI.Silent,
-    MOI.TimeLimitSec,
-    MOI.NumberOfThreads,
-    MOI.VariablePrimalStart,
-}
 
 # ~*~ :: MathOptInterface :: ~*~ #
-function MOI.empty!(sampler::AbstractSampler)
-    sampler = nothing
+function MOI.empty!(sampler::AbstractSampler{T}) where {T}
+    QUBODrivers.set_model!(sampler, QUBOTools.Model{VI,T,Int}())
 
     return sampler
 end
 
 function MOI.is_empty(sampler::AbstractSampler)
-    return isnothing(sampler)
+    return isempty(QUBOTools.backend(sampler))
 end
 
 function MOI.optimize!(sampler::AbstractSampler)
     return _sample!(sampler)
 end
 
-function MOI.copy_to(sampler::AbstractSampler{T}, model::MOI.ModelLike) where {T}
-    MOI.empty!(sampler)
-
-    sampler = parse_model(T, model)::QUBOTools.Model{VI,T}
-
-    ws = QUBOTools.warm_start(sampler)::Dict{VI,Int}
+function MOI.copy_to(sampler::AbstractSampler{T}, src::MOI.ModelLike) where {T}
+    QUBODrivers.set_model!(sampler, QUBOTools.Model{T}(src))
 
     # Collect warm-start values
-    for v in MOI.get(model, MOI.ListOfVariableIndices())
-        x = MOI.get(model, MOI.VariablePrimalStart(), v)
+    for v in MOI.get(src, MOI.ListOfVariableIndices())
+        x = MOI.get(src, MOI.VariablePrimalStart(), v)
 
         MOI.set(sampler, MOI.VariablePrimalStart(), v, x)
-
-        if !isnothing(x)
-            ws[v] = QUBOTools.cast(
-                source_domain(sampler) => target_domain(sampler),
-                round(Int, x),
-            )
-        end
     end
 
-    return MOIU.identity_index_map(model)
-end
-
-function MOI.get(
-    sampler::AbstractSampler,
-    st::Union{MOI.PrimalStatus,MOI.DualStatus},
-    ::VI,
-)
-    if !(1 <= st.result_index <= MOI.get(sampler, MOI.ResultCount()))
-        return MOI.NO_SOLUTION
-    else
-        # This status is also not very accurate, but all points are feasible
-        # in a general sense since these problems are unconstrained.
-        return MOI.FEASIBLE_POINT
-    end
+    return MOIU.identity_index_map(src)
 end
 
 function MOI.get(sampler::AbstractSampler, ::MOI.RawStatusString)
@@ -158,7 +126,7 @@ function MOI.get(sampler::AbstractSampler, ov::MOI.ObjectiveValue)
 
     if isempty(ω)
         error("Invalid result index '$i'; There are no solutions")
-    elseif !(1 <= i <= n)
+    elseif !(1 <= i <= m)
         error("Invalid result index '$i'; There are $(m) solutions")
     end
 

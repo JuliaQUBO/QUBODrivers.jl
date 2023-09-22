@@ -130,13 +130,13 @@ function _test_basic_spin_min(
             si = MOI.get.(model, MOI.VariablePrimal(i), s)
             Hi = MOI.get(model, MOI.ObjectiveValue(i))
 
-            if si ≈ [↓, ↓, ↑] || si ≈ [↓, ↑, ↓] || si ≈ [↑, ↓, ↓]
+            if si ≈ [↑, ↑, ↓] || si ≈ [↑, ↓, ↑] || si ≈ [↓, ↑, ↑]
                 Test.@test Hi ≈ -5.0
-            elseif si ≈ [↑, ↑, ↓] || si ≈ [↑, ↓, ↑] || si ≈ [↓, ↑, ↑]
+            elseif si ≈ [↓, ↓, ↑] || si ≈ [↓, ↑, ↓] || si ≈ [↑, ↓, ↓]
                 Test.@test Hi ≈ -3.0
-            elseif si ≈ [↓, ↓, ↓]
-                Test.@test Hi ≈ 9.0
             elseif si ≈ [↑, ↑, ↑]
+                Test.@test Hi ≈ 9.0
+            elseif si ≈ [↓, ↓, ↓]
                 Test.@test Hi ≈ 15.0
             else
                 Test.@test false
@@ -154,7 +154,7 @@ function _test_basic_spin_max(
     h::Vector{T},
     J::Matrix{T},
 ) where {T,S<:AbstractSampler{T}}
-    Test.@testset "▷ Spin ⋄ Min" begin
+    Test.@testset "▷ Spin ⋄ Max" begin
         # Build Model
         model = MOI.instantiate(sampler; with_bridge_type = T)
 
@@ -181,13 +181,13 @@ function _test_basic_spin_max(
             si = MOI.get.(model, MOI.VariablePrimal(i), s)
             Hi = MOI.get(model, MOI.ObjectiveValue(i))
 
-            if si ≈ [↑, ↑, ↑]
+            if si ≈ [↓, ↓, ↓]
                 Test.@test Hi ≈ 15.0
-            elseif si ≈ [↓, ↓, ↓]
+            elseif si ≈ [↑, ↑, ↑]
                 Test.@test Hi ≈ 9.0
-            elseif si ≈ [↑, ↑, ↓] || si ≈ [↑, ↓, ↑] || si ≈ [↓, ↑, ↑]
-                Test.@test Hi ≈ -3.0
             elseif si ≈ [↓, ↓, ↑] || si ≈ [↓, ↑, ↓] || si ≈ [↑, ↓, ↓]
+                Test.@test Hi ≈ -3.0
+            elseif si ≈ [↑, ↑, ↓] || si ≈ [↑, ↓, ↑] || si ≈ [↓, ↑, ↑]
                 Test.@test Hi ≈ -5.0
             else
                 Test.@test false

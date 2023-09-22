@@ -14,6 +14,11 @@ function sample(::S) where {S<:AbstractSampler}
     return nothing
 end
 
+@doc raw"""
+    set_model!
+"""
+function set_model! end
+
 function _sample!(sampler::AbstractSampler{T}) where {T}
     results = @timed sample(sampler)
 

@@ -1,5 +1,5 @@
 function _is_spin(model)
-    return (VI, Spin) ∈ MOI.get(m, MOI.ListOfConstraintTypesPresent())
+    return (VI, Spin) ∈ MOI.get(model, MOI.ListOfConstraintTypesPresent())
 end
 
 function test_identiy_sampler()

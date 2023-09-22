@@ -13,15 +13,16 @@ const SQT{T} = MOI.ScalarQuadraticTerm{T}
 using QUBOTools
 const Spin = QUBOTools.__moi_spin_set()
 
-export MOI, Sample, SampleSet, Spin, qubo, ising, ↑, ↓
+export MOI, Sample, SampleSet, Spin, ↓, ↑
 
 include("interface/sampler.jl")
 include("interface/attributes.jl")
 
-include("library/wrappers/moi.jl")
-include("library/wrappers/qubotools.jl")
+include("library/sampler/attributes.jl")
+include("library/sampler/wrappers/moi.jl")
+include("library/sampler/wrappers/qubotools.jl")
 
-# include("library/test/test.jl")
+include("library/test/test.jl")
 
 include("library/setup/error.jl")
 include("library/setup/specs.jl")

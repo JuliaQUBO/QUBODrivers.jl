@@ -28,7 +28,7 @@ sample_state(rng::AbstractRNG, n::Integer) = rand(rng, (0, 1), n)
 
 function QUBODrivers.sample(sampler::Optimizer{T}) where {T}
     # Retrieve Model
-    n, L, Q, α, β = qubo(sampler, :dict; sense = :min)
+    n, L, Q, α, β = QUBOTools.qubo(sampler, :dict; sense = :min)
 
     # Retrieve Attributes
     num_reads = MOI.get(sampler, NumberOfReads())
@@ -46,8 +46,8 @@ function QUBODrivers.sample(sampler::Optimizer{T}) where {T}
     # Sample Random States
     samples = Vector{Sample{T,Int}}(undef, num_reads)
     results = @timed for i = 1:num_reads
-        ψ = sample_state(rng, n)
-        λ = QUBOTools.value(L, Q, ψ, α, β)
+        ψ = sample_state(rng, n)::Vector{Int}
+        λ = QUBOTools.value(ψ, L, Q, α, β)
 
         samples[i] = Sample{T,Int}(ψ, λ)
     end

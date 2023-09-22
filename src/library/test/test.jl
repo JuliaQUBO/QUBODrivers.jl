@@ -26,7 +26,7 @@ end
 function QUBODrivers.test(config!::Function, ::Type{S}; examples::Bool=true) where {T,S<:AbstractSampler{T}}
     solver_name = MOI.get(S(), MOI.SolverName())
 
-    Test.@testset "☢ QUBODrivers' Tests for $(solver_name) ☢" verbose = true begin
+    Test.@testset "☢ QUBODrivers' Test Suite for «$(solver_name)» ☢" verbose = true begin
         Test.@testset "→ Interface" begin
             _test_moi_interface(config!, S)
             _test_automatic_interface(config!, S)

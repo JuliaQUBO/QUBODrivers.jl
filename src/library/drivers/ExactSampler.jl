@@ -30,7 +30,7 @@ function QUBODrivers.sample(sampler::Optimizer{T}) where {T}
     samples = Vector{Sample{T,Int}}(undef, m)
     results = @timed for i = 1:m
         ψ = sample_state(i, n)
-        λ = QUBOTools.value(L, Q, ψ, α, β)
+        λ = QUBOTools.value(ψ, L, Q, α, β)
 
         samples[i] = Sample{T}(ψ, λ)
     end

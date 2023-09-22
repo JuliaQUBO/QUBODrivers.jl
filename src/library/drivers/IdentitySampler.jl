@@ -14,10 +14,26 @@ QUBODrivers.@setup Optimizer begin
 end
 
 function sample_state(sampler::Optimizer{T}, n::Integer) where {T}
-    return round.(Int, start.(sampler, 1:n))
+    ψ = Vector{Int}(undef, n)
+
+    for i = 1:n
+        s = QUBOTools.start(sampler, i; domain = :bool)
+
+        if !isnothing(s)
+            ψ[i] = s
+        else
+            v = QUBOTools.variable(sampler, i)
+
+            error("Warm-start value for '$v' is missing")
+
+            return nothing
+        end
+    end
+
+    return ψ
 end
 
-function sample(sampler::Optimizer{T}) where {T}
+function QUBODrivers.sample(sampler::Optimizer{T}) where {T}
     # Retrieve Model
     n, L, Q, α, β = QUBOTools.qubo(sampler, :dict; sense = :min)
 
@@ -25,7 +41,7 @@ function sample(sampler::Optimizer{T}) where {T}
     samples = Vector{Sample{T,Int}}(undef, 1)
     results = @timed begin
         ψ = sample_state(sampler, n)
-        λ = QUBOTools.value(L, Q, ψ, α, β)
+        λ = QUBOTools.value(ψ, L, Q, α, β)
 
         samples[] = Sample{T}(ψ, λ)
     end
