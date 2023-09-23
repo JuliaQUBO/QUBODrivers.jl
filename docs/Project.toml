@@ -1,13 +1,14 @@
 [deps]
-Documenter       = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
-JuMP             = "4076af6c-e467-56ae-b986-b466b2749572"
+Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+JuMP = "4076af6c-e467-56ae-b986-b466b2749572"
 MathOptInterface = "b8f27783-ece8-5eb3-8dc8-9495eed66fee"
-Plots            = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
-QUBOTools        = "60eb5b62-0a39-4ddc-84c5-97d2adff9319"
+Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
+QUBODrivers = "a3f166f7-2cd3-47b6-9e1e-6fbfe0449eb0"
+QUBOTools = "60eb5b62-0a39-4ddc-84c5-97d2adff9319"
 
 [compat]
-Documenter       = "0.27"
-JuMP             = "1"
+Documenter = "1"
+JuMP = "1"
 MathOptInterface = "1"
-Plots            = "1.38"
-QUBOTools        = "0.8"
+Plots = "1.38"
+QUBOTools = "0.10"

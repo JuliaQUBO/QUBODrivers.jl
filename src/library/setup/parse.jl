@@ -74,7 +74,7 @@ function __setup_parse_block(block; id = :Optimizer)
                     end
 
                     if !(value isa VersionNumber)
-                        setup_error("Sampler 'version' must be a valid version number")
+                        setup_error("Sampler 'version' must be a valid version number, not '$value'")
 
                         return nothing
                     end
@@ -130,7 +130,7 @@ function __setup_parse_block(block; id = :Optimizer)
     end
 
     if isnothing(version)
-        version = v"0.0.0"
+        version = QUBODrivers.__VERSION__
     end
 
     if isnothing(attributes)

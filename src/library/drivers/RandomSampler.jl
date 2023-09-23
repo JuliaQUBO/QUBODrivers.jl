@@ -16,7 +16,6 @@ using Random
 """
 QUBODrivers.@setup Optimizer begin
     name       = "Random Sampler"
-    version    = v"0.3.0"
     attributes = begin
         RandomSeed["seed"]::Union{Integer,Nothing} = nothing
         NumberOfReads["num_reads"]::Integer        = 1_000

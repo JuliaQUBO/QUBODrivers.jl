@@ -13,6 +13,10 @@ const SQT{T} = MOI.ScalarQuadraticTerm{T}
 using QUBOTools
 const Spin = QUBOTools.__moi_spin_set()
 
+using TOML
+const __PROJECT__ = joinpath(@__DIR__, "..", "Project.toml")
+const __VERSION__ = VersionNumber(TOML.parsefile(__PROJECT__)["version"])
+
 export MOI, Sample, SampleSet, Spin, ↓, ↑
 
 include("interface/sampler.jl")
