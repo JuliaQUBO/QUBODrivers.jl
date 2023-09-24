@@ -6,27 +6,16 @@ MOI.supports_constraint(
 ) = false
 
 # ~ They are also binary
-MOI.supports_constraint(
-    ::AbstractSampler,
-    ::Type{VI},
-    ::Type{MOI.ZeroOne},
-) = true
+MOI.supports_constraint(::AbstractSampler, ::Type{VI}, ::Type{MOI.ZeroOne}) = true
 
-MOI.supports_constraint(
-    ::AbstractSampler,
-    ::Type{VI},
-    ::Type{Spin},
-) = true
+MOI.supports_constraint(::AbstractSampler, ::Type{VI}, ::Type{Spin}) = true
 
 # ~ Objective Function Support
-MOI.supports(
-    ::AbstractSampler,
-    ::MOI.ObjectiveFunction{<:Any}
-) = false
+MOI.supports(::AbstractSampler, ::MOI.ObjectiveFunction{<:Any}) = false
 
 MOI.supports(
     ::AbstractSampler{T},
-    ::MOI.ObjectiveFunction{<:Union{SQF{T}, SAF{T}, VI}}
+    ::MOI.ObjectiveFunction{<:Union{SQF{T},SAF{T},VI}},
 ) where {T} = true
 
 # By default, all samplers are their own raw solvers.
@@ -144,12 +133,8 @@ function MOI.get(sampler::AbstractSampler{T}, vp::MOI.VariablePrimal, vi::VI) wh
 
     if isempty(ω)
         error("Invalid result index '$i'; There are no solutions")
-
-        return nothing
     elseif !(1 <= i <= m)
         error("Invalid result index '$i'; There are $(m) solutions")
-
-        return nothing
     end
 
     j = QUBOTools.index(sampler, vi)
@@ -160,50 +145,4 @@ end
 
 function MOI.get(sampler::AbstractSampler, ::MOI.NumberOfVariables)
     return QUBOTools.dimension(sampler)
-end
-
-# ~*~ File IO: Base API ~*~ #
-# function Base.write(
-#     filename::AbstractString,
-#     sampler::AbstractSampler,
-#     fmt::QUBOTools.AbstractFormat = QUBOTools.infer_format(filename),
-# )
-#     return QUBOTools.write_model(filename, sampler, fmt)
-# end
-
-# function Base.read!(
-#     filename::AbstractString,
-#     sampler::AbstractSampler,
-#     fmt::QUBOTools.AbstractFormat = QUBOTools.infer_format(filename),
-# )
-#     sampler.source = QUBOTools.read_model(filename, fmt)
-#     sampler.target = QUBOTools.format(sampler, sampler.source)
-
-#     return sampler
-# end
-
-function warm_start(sampler::AbstractSampler, i::Integer)
-    v = QUBOTools.variable_inv(sampler, i)
-    x = MOI.get(sampler, MOI.VariablePrimalStart(), v)
-
-    if isnothing(x)
-        return nothing
-    else
-        return QUBOTools.cast(
-            source_domain(sampler) => target_domain(sampler),
-            round(Int, x),
-        )
-    end
-end
-
-function warm_start(sampler::AbstractSampler{T}) where {T}
-    n = MOI.get(sampler, MOI.NumberOfVariables())
-    s = sizehint!(Dict{Int,Int}(), n)
-
-    for i = 1:n
-        x = warm_start(sampler, i)
-        isnothing(x) || (s[i] = x)
-    end
-
-    return s
 end

@@ -26,8 +26,6 @@ function sample_state(sampler::Optimizer{T}, n::Integer) where {T}
             v = QUBOTools.variable(sampler, i)
 
             error("Warm-start value for '$v' is missing")
-
-            return nothing
         end
     end
 

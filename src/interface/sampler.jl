@@ -10,8 +10,6 @@ function sample end
 
 function sample(::S) where {S<:AbstractSampler}
     error("`QUBODrivers.sample` is not implemented for '$S'")
-
-    return nothing
 end
 
 @doc raw"""

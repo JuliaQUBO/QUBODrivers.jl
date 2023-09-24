@@ -4,8 +4,6 @@ end
 
 function __setup_parse(args...)
     setup_error("Macro takes 1 or 2 arguments, not '$(length(args))'")
-
-    return nothing
 end
 
 function __setup_parse(expr)
@@ -17,16 +15,12 @@ function __setup_parse(expr)
         setup_error(
             "Single argument must be either an identifier or a `begin ... end` block",
         )
-
-        return nothing
     end
 end
 
 function __setup_parse(id, block)
     if !(id isa Symbol) || !Base.isidentifier(id)
         setup_error("First argument must be a valid identifier")
-
-        return nothing
     end
 
     if !(block isa Expr && block.head === :block)
@@ -55,32 +49,24 @@ function __setup_parse_block(block; id = :Optimizer)
                 if key === :name
                     if !isnothing(name)
                         setup_error("Duplicate entries for 'name'")
-
-                        return nothing
                     end
 
                     name = value
                 elseif key === :version
                     if !isnothing(version)
                         setup_error("Duplicate entries for 'version'")
-
-                        return nothing
                     end
 
                     version = value
                 elseif key === :attributes
                     if !isnothing(attributes)
                         setup_error("Duplicate entries for 'attributes' block")
-
-                        return nothing
                     end
 
                     if !(value isa Expr && value.head === :block)
                         setup_error(
                             "Sampler attributes must be placed inside a `begin ... end` block",
                         )
-
-                        return nothing
                     end
 
                     attributes = _AttrSpec[]
@@ -96,25 +82,17 @@ function __setup_parse_block(block; id = :Optimizer)
                     setup_error(
                         "Sampler configuration keys must be either 'name', 'version' or 'attributes', not '$key'",
                     )
-
-                    return nothing
                 end
             else
                 setup_error("Sampler configuration keys must be a valid identifiers")
-
-                return nothing
             end
         else
             setup_error("Sampler configuration must be provided by `key = value` pairs")
-
-            return nothing
         end
     end
 
     if isnothing(name)
         setup_error("'name' entry is missing")
-
-        return nothing
     end
 
     if isnothing(version)
@@ -149,16 +127,12 @@ function __setup_parse_attr(stmt)
     if attr isa Symbol # ~ MOI attribute only
         if !(Base.isidentifier(attr))
             setup_error("Attribute identifier '$attr' is not valid")
-
-            return nothing
         end
 
         opt_attr = attr
     elseif attr isa String # ~ Raw attribute only
         if isempty(attr)
             setup_error("Raw attribute key can't be an empty string")
-
-            return nothing
         end
 
         raw_attr = attr
@@ -168,8 +142,6 @@ function __setup_parse_attr(stmt)
         if attr isa Symbol
             if !(Base.isidentifier(attr))
                 setup_error("Attribute identifier '$attr' is not a valid one")
-
-                return nothing
             end
 
             opt_attr = attr
@@ -181,18 +153,12 @@ function __setup_parse_attr(stmt)
             if opt_attr isa Symbol && raw_attr isa String
                 if !(Base.isidentifier(opt_attr))
                     setup_error("Attribute identifier '$opt_attr' is not a valid one")
-
-                    return nothing
                 end
             else
                 setup_error("Invalid attribute identifier '$name($raw)'")
-
-                return nothing
             end
         else
             setup_error("Invalid attribute identifier '$attr'")
-
-            return nothing
         end
     elseif attr isa Expr && (attr.head === :ref || attr.head === :call)
         opt_attr, raw_attr = attr.args
@@ -200,18 +166,12 @@ function __setup_parse_attr(stmt)
         if opt_attr isa Symbol && raw_attr isa String
             if !(Base.isidentifier(opt_attr))
                 setup_error("Attribute identifier '$opt_attr' is not a valid one")
-
-                return nothing
             end
         else
             setup_error("Invalid attribute identifier '$name[$raw_attr]'")
-
-            return nothing
         end
     else
         setup_error("Invalid attribute signature '$attr'")
-
-        return nothing
     end
 
     if !isnothing(raw_attr)

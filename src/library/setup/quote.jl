@@ -236,27 +236,19 @@ function __setup_quote_moi_attrs(spec::_SamplerSpec)
         function MOI.set(sampler::$(Optimizer){T}, ::MOI.VariablePrimalStart, vi::VI, value) where {T}
             if !(isnothing(value) || value isa Real)
                 error("Value for 'MOI.VariablePrimalStart' must be an integer, or 'nothing'")
-
-                return nothing
             end
 
             if !isnothing(value)
                 if !(value isa Real && isinteger(value))
                     error("Value for 'MOI.VariablePrimalStart' must be an integer, or 'nothing'")
-
-                    return nothing
                 end
 
                 X = QUBOTools.domain(sampler)
 
                 if X === QUBOTools.BoolDomain && !(value == zero(value) || value == one(value))
                     error("Integer value for 'MOI.VariablePrimalStart' must be either '0' or '1'")
-
-                    return nothing
                 elseif X === QUBOTools.SpinDomain && !(value == -one(value) || value == one(value))
                     error("Integer value for 'MOI.VariablePrimalStart' must be either '-1' or '1'")
-
-                    return nothing
                 end
             end
 

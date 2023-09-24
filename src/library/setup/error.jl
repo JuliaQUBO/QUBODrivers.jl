@@ -10,6 +10,4 @@ end
 
 function setup_error(msg::AbstractString)
     throw(DriverSetupError(msg))
-
-    return nothing
 end

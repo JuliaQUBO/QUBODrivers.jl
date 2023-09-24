@@ -22,7 +22,6 @@ export MOI, Sample, SampleSet, Spin, ↓, ↑
 include("interface/sampler.jl")
 include("interface/attributes.jl")
 
-include("library/sampler/attributes.jl")
 include("library/sampler/wrappers/moi.jl")
 include("library/sampler/wrappers/qubotools.jl")
 
