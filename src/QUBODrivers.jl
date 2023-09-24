@@ -10,25 +10,33 @@ const SAT{T} = MOI.ScalarAffineTerm{T}
 const SQF{T} = MOI.ScalarQuadraticFunction{T}
 const SQT{T} = MOI.ScalarQuadraticTerm{T}
 
-import QUBOTools: QUBOTools, Sample, SampleSet, qubo, ising, ↑, ↓
+using QUBOTools
+const Spin = QUBOTools.__moi_spin_set()
 
-export MOI, Sample, SampleSet, Spin, qubo, ising, ↑, ↓
+using TOML
+const __PROJECT__ = joinpath(@__DIR__, "..", "Project.toml")
+const __VERSION__ = VersionNumber(TOML.parsefile(__PROJECT__)["version"])
 
-include("abstract/interface.jl")
-include("abstract/wrapper.jl")
+export MOI, Sample, SampleSet, Spin, ↓, ↑
 
-include("automatic/interface.jl")
-include("automatic/attributes.jl")
-include("automatic/setup.jl")
-include("automatic/sample.jl")
-include("automatic/wrapper.jl")
+include("interface/sampler.jl")
+include("interface/attributes.jl")
 
-include("test/test.jl")
+include("library/sampler/wrappers/moi.jl")
+include("library/sampler/wrappers/qubotools.jl")
+
+include("library/test/test.jl")
+
+include("library/setup/error.jl")
+include("library/setup/specs.jl")
+include("library/setup/parse.jl")
+include("library/setup/quote.jl")
+include("library/setup/macro.jl")
 
 export ExactSampler, IdentitySampler, RandomSampler
 
-include("drivers/ExactSampler.jl")
-include("drivers/IdentitySampler.jl")
-include("drivers/RandomSampler.jl")
+include("library/drivers/ExactSampler.jl")
+include("library/drivers/IdentitySampler.jl")
+include("library/drivers/RandomSampler.jl")
 
 end # module QUBODrivers

@@ -2,22 +2,20 @@ using Test
 using QUBODrivers
 using QUBODrivers: QUBOTools
 
-include("drivers/exact_sampler.jl")
-include("drivers/identity_sampler.jl")
-include("drivers/random_sampler.jl")
+const VI = MOI.VariableIndex
 
-function test_drivers()
-    @testset "Driver Bundle" verbose = true begin
-        test_exact_sampler()
-        test_identiy_sampler()
-        test_random_sampler()
+include("assets/test_macro_throws.jl")
+
+include("setup/setup.jl")
+include("drivers/sampler_bundle.jl")
+
+function main()
+    @testset "◈ ◈ ◈ QUBODrivers.jl Test Suite ◈ ◈ ◈" verbose = true begin
+        test_setup_macro()
+        test_sampler_bundle()
     end
 
     return nothing
-end
-
-function main()
-    test_drivers()
 end
 
 main() # Here we go!
