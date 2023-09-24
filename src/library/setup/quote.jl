@@ -38,8 +38,27 @@ function __setup_quote_interface(spec::_SamplerSpec)
         end
 
         # MOI interface
-        MOI.get(::$(Optimizer), ::MOI.SolverName)    = $(OptimizerName)
-        MOI.get(::$(Optimizer), ::MOI.SolverVersion) = $(OptimizerVersion)
+        function MOI.get(::$(Optimizer), ::MOI.SolverName)
+            return $(OptimizerName)
+        end
+
+        function MOI.get(::$(Optimizer), ::MOI.SolverVersion)
+            return $(OptimizerVersion)
+        end
+
+        let opt = $(Optimizer)()
+            opt_name = MOI.get(opt, MOI.SolverName())
+
+            if !(opt_name isa String)
+                error("'name' has to be a string, not '$(opt_name)::$(typeof(opt_name))'")
+            end
+
+            opt_version = MOI.get(opt, MOI.SolverVersion())
+
+            if !(opt_version isa VersionNumber)
+                error("'version' has to be a VersionNumber, not '$(opt_version)::$(typeof(opt_version))'")
+            end
+        end
 
         # Attributes - get
         function MOI.get(sampler::$(Optimizer), attr::MOI.RawOptimizerAttribute)

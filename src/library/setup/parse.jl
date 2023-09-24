@@ -3,7 +3,7 @@ function __setup_parse()
 end
 
 function __setup_parse(args...)
-    setup_error("macro takes exactly one or two arguments")
+    setup_error("Macro takes 1 or 2 arguments, not '$(length(args))'")
 
     return nothing
 end
@@ -59,22 +59,10 @@ function __setup_parse_block(block; id = :Optimizer)
                         return nothing
                     end
 
-                    if !(value isa String)
-                        setup_error("Sampler 'name' must be a string")
-
-                        return nothing
-                    end
-
                     name = value
                 elseif key === :version
                     if !isnothing(version)
                         setup_error("Duplicate entries for 'version'")
-
-                        return nothing
-                    end
-
-                    if !(value isa VersionNumber)
-                        setup_error("Sampler 'version' must be a valid version number, not '$value'")
 
                         return nothing
                     end
@@ -117,7 +105,7 @@ function __setup_parse_block(block; id = :Optimizer)
                 return nothing
             end
         else
-            setup_error("sampler configuration must be provided by `key = value` pairs")
+            setup_error("Sampler configuration must be provided by `key = value` pairs")
 
             return nothing
         end

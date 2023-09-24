@@ -35,18 +35,17 @@ end
 
 struct _SamplerSpec
     id::Symbol
-    name::String
-    version::VersionNumber
+    name::Any
+    version::Any
     attributes::Vector{_AttrSpec}
 
     function _SamplerSpec(;
         id::Symbol                    = :Optimizer,
-        name::AbstractString          = "",
-        version::VersionNumber        = v"0.1.0",
+        name::Any                     = "",
+        version::Any                  = QUBODrivers.__VERSION__,
         attributes::Vector{_AttrSpec} = _AttrSpec[],
     )
         @assert Base.isidentifier(id)
-        # @assert !isempty(name)
 
         return new(id, name, version, attributes)
     end
@@ -55,6 +54,6 @@ end
 function Base.:(==)(x::_SamplerSpec, y::_SamplerSpec)
     return x.id === y.id &&
            x.name == y.name &&
-           x.version === y.version &&
+           x.version == y.version &&
            x.attributes == y.attributes
 end
