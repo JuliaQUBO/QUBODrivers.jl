@@ -1,13 +1,9 @@
-function __setup_parse()
-    return _SamplerSpec()
-end
-
 function __setup_parse(args...)
     setup_error("Macro takes 1 or 2 arguments, not '$(length(args))'")
 end
 
 function __setup_parse(expr)
-    if expr isa Symbol
+    if expr isa Symbol && Base.isidentifier(expr)
         return _SamplerSpec(; id = __setup_parse_id(expr))
     elseif (expr isa Expr && expr.head === :block)
         return __setup_parse_block(expr)
@@ -31,9 +27,7 @@ function __setup_parse(id, block)
 end
 
 function __setup_parse_block(block; id = :Optimizer)
-    if !(block.head === :block)
-        setup_error("Sampler configuration must be provided within a `begin ... end` block")
-    end
+    @assert (block isa Expr && block.head === :block)
 
     name       = nothing
     version    = nothing
@@ -45,7 +39,7 @@ function __setup_parse_block(block; id = :Optimizer)
         elseif item isa Expr && item.head === :(=)
             key, value = item.args
 
-            if key isa Symbol
+            if key isa Symbol && Base.isidentifier(key)
                 if key === :name
                     if !isnothing(name)
                         setup_error("Duplicate entries for 'name'")
@@ -84,7 +78,7 @@ function __setup_parse_block(block; id = :Optimizer)
                     )
                 end
             else
-                setup_error("Sampler configuration keys must be a valid identifiers")
+                setup_error("Sampler configuration keys must be valid identifiers, not '$key'")
             end
         else
             setup_error("Sampler configuration must be provided by `key = value` pairs")

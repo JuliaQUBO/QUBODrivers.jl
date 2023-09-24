@@ -4,6 +4,8 @@ using QUBODrivers: QUBOTools
 
 const VI = MOI.VariableIndex
 
+include("assets/test_macro_throws.jl")
+
 include("setup/setup.jl")
 include("drivers/sampler_bundle.jl")
 
