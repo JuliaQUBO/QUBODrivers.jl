@@ -198,6 +198,92 @@ function _test_basic_spin_max(
     return nothing
 end
 
+
+function _test_basic_spin_min_and_max(
+    config!::Function,
+    sampler::Type{S},
+    n::Integer,
+    h::Vector{T},
+    J::Matrix{T},
+) where {T,S<:AbstractSampler{T}}
+    Test.@testset "▷ Spin ⋄ Min and Max" begin
+        # Build Model
+        model = MOI.instantiate(sampler; with_bridge_type = T)
+
+        s, _ = MOI.add_constrained_variables(model, fill(Spin(), n))
+
+        MOI.set(model, MOI.ObjectiveSense(), MOI.MIN_SENSE)
+        MOI.set(
+            model,
+            MOI.ObjectiveFunction{SQF{T}}(),
+            SQF{T}(
+                SQT{T}[SQT{T}(J[i, j], s[i], s[j]) for i = 1:n for j = 1:n],
+                SAT{T}[SAT{T}(h[i], s[i]) for i = 1:n],
+                zero(T),
+            ),
+        )
+
+        config!(model)
+
+        MOI.optimize!(model)
+
+        Test.@test MOI.get(model, MOI.ResultCount()) > 0
+
+        for i = 1:MOI.get(model, MOI.ResultCount())
+            si = MOI.get.(model, MOI.VariablePrimal(i), s)
+            Hi = MOI.get(model, MOI.ObjectiveValue(i))
+
+            if si ≈ [↑, ↑, ↓] || si ≈ [↑, ↓, ↑] || si ≈ [↓, ↑, ↑]
+                Test.@test Hi ≈ -5.0
+            elseif si ≈ [↓, ↓, ↑] || si ≈ [↓, ↑, ↓] || si ≈ [↑, ↓, ↓]
+                Test.@test Hi ≈ -3.0
+            elseif si ≈ [↑, ↑, ↑]
+                Test.@test Hi ≈ 9.0
+            elseif si ≈ [↓, ↓, ↓]
+                Test.@test Hi ≈ 15.0
+            else
+                Test.@test false
+            end
+        end
+
+        # Change ObjectiveSense to Max
+        MOI.set(model, MOI.ObjectiveSense(), MOI.MAX_SENSE)
+        MOI.set(
+            model,
+            MOI.ObjectiveFunction{SQF{T}}(),
+            SQF{T}(
+                SQT{T}[SQT{T}(J[i, j], s[i], s[j]) for i = 1:n for j = 1:n],
+                SAT{T}[SAT{T}(h[i], s[i]) for i = 1:n],
+                zero(T),
+            ),
+        )
+
+        config!(model)
+
+        MOI.optimize!(model)
+
+        Test.@test MOI.get(model, MOI.ResultCount()) > 0
+
+        for i = 1:MOI.get(model, MOI.ResultCount())
+            si = MOI.get.(model, MOI.VariablePrimal(i), s)
+            Hi = MOI.get(model, MOI.ObjectiveValue(i))
+
+            if si ≈ [↓, ↓, ↓]
+                Test.@test Hi ≈ 15.0
+            elseif si ≈ [↑, ↑, ↑]
+                Test.@test Hi ≈ 9.0
+            elseif si ≈ [↓, ↓, ↑] || si ≈ [↓, ↑, ↓] || si ≈ [↑, ↓, ↓]
+                Test.@test Hi ≈ -3.0
+            elseif si ≈ [↑, ↑, ↓] || si ≈ [↑, ↓, ↑] || si ≈ [↓, ↑, ↑]
+                Test.@test Hi ≈ -5.0
+            else
+                Test.@test false
+            end
+        end
+    end
+    return nothing
+end
+
 function _test_basic_examples(
     config!::Function,
     sampler::Type{S},
@@ -217,6 +303,7 @@ function _test_basic_examples(
         _test_basic_bool_max(config!, sampler, n, Q)
         _test_basic_spin_min(config!, sampler, n, h, J)
         _test_basic_spin_max(config!, sampler, n, h, J)
+        _test_basic_spin_min_and_max(config!, sampler, n, h, J)
     end
 
     return nothing
