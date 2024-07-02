@@ -13,6 +13,8 @@ MOI.supports_constraint(::AbstractSampler, ::Type{VI}, ::Type{Spin}) = true
 # ~ Objective Function Support
 MOI.supports(::AbstractSampler, ::MOI.ObjectiveFunction{<:Any}) = false
 
+MOI.supports(::AbstractSampler, ::MOI.ObjectiveSense) = true
+
 MOI.supports(
     ::AbstractSampler{T},
     ::MOI.ObjectiveFunction{<:Union{SQF{T},SAF{T},VI}},
