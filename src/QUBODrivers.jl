@@ -11,7 +11,8 @@ const SQF{T} = MOI.ScalarQuadraticFunction{T}
 const SQT{T} = MOI.ScalarQuadraticTerm{T}
 
 using QUBOTools
-const Spin = QUBOTools.__moi_spin_set()
+const QUBOTools_MOI = Base.get_extension(QUBOTools, :QUBOTools_MOI)
+const Spin          = QUBOTools_MOI.Spin
 
 using TOML
 const __PROJECT__ = joinpath(@__DIR__, "..", "Project.toml")
