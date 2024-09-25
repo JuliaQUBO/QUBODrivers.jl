@@ -15,8 +15,8 @@ makedocs(;
         sidebar_sitename = false,
     ),
     sitename = "QUBODrivers.jl",
-    authors = "Pedro Xavier and Pedro Ripper and Tiago Andrade and Joaquim Garcia and David Bernal",
-    pages = [
+    authors  = "Pedro Maciel Xavier and Pedro Ripper and Tiago Andrade and Joaquim Garcia and David E. Bernal Neira",
+    pages    = [
         "Home"   => "index.md",
         "Manual" => [
             "Introduction"  => "manual/1-intro.md",
@@ -38,5 +38,5 @@ makedocs(;
 if "--skip-deploy" ∈ ARGS
     @warn "Skipping deployment"
 else
-    deploydocs(; repo = raw"github.com/psrenergy/QUBODrivers.jl.git", push_preview = true)
+    deploydocs(; repo = raw"github.com/JuliaQUBO/QUBODrivers.jl.git", push_preview = true)
 end

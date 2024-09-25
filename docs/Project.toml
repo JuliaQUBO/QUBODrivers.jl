@@ -7,8 +7,8 @@ QUBODrivers = "a3f166f7-2cd3-47b6-9e1e-6fbfe0449eb0"
 QUBOTools = "60eb5b62-0a39-4ddc-84c5-97d2adff9319"
 
 [compat]
-Documenter = "1"
-JuMP = "1"
+Documenter       = "1"
+JuMP             = "1"
 MathOptInterface = "1"
-Plots = "1.38"
-QUBOTools = "0.9"
+Plots            = "1.38"
+QUBOTools        = "0.10"
