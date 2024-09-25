@@ -1,6 +1,6 @@
 name = "QUBODrivers"
 uuid = "a3f166f7-2cd3-47b6-9e1e-6fbfe0449eb0"
-authors = ["pedromxavier <pedroxavier@psr-inc.com>", "pedroripper <pedroripper@psr-inc.com>", "AndradeTiago <tiago.andrade@psr-inc.com>", "joaquimg <joaquim@psr-inc.com>", "bernalde <dbernaln@purdue.edu>"]
+authors = ["pedromxavier <mail@pedro.ϵλ>", "pedroripper <pedroripper@psr-inc.com>", "AndradeTiago <tiago.andrade@psr-inc.com>", "joaquimg <joaquim@psr-inc.com>", "bernalde <dbernaln@purdue.edu>"]
 version = "0.3.3"
 
 [deps]
