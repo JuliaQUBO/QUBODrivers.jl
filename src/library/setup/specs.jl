@@ -42,7 +42,7 @@ struct _SamplerSpec
     function _SamplerSpec(;
         id::Symbol                    = :Optimizer,
         name::Any                     = "",
-        version::Any                  = QUBODrivers.__VERSION__,
+        version::Any                  = QUBODrivers.__version__(),
         attributes::Vector{_AttrSpec} = _AttrSpec[],
     )
         @assert Base.isidentifier(id)

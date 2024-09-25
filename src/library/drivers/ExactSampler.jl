@@ -15,7 +15,7 @@ This sampler performs an exhaustive search over all ``2^{n}`` possible states.
 """
 QUBODrivers.@setup Optimizer begin
     name    = "Exact Sampler"
-    version = QUBODrivers.__VERSION__
+    version = QUBODrivers.__version__()
 end
 
 sample_state(i::Integer, n::Integer) = digits(Int, i - 1; base = 2, pad = n)

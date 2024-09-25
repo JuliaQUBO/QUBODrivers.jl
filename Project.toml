@@ -5,19 +5,19 @@ version = "0.3.3"
 
 [deps]
 MathOptInterface = "b8f27783-ece8-5eb3-8dc8-9495eed66fee"
-QUBOTools = "60eb5b62-0a39-4ddc-84c5-97d2adff9319"
-Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
-TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
-Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+QUBOTools        = "60eb5b62-0a39-4ddc-84c5-97d2adff9319"
+Random           = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+TOML             = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
+Test             = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [weakdeps]
 PythonCall = "6099a3de-0909-46bc-b1f4-468b9a2dfc0d"
-
+    
 [extensions]
 MOI_PythonCall = ["PythonCall"]
 
 [compat]
 MathOptInterface = "1"
-PythonCall = "0.9.14"
-QUBOTools = "~0.9"
-julia = "1.9"
+PythonCall       = "0.9"
+QUBOTools        = "0.10"
+julia            = "1.9"

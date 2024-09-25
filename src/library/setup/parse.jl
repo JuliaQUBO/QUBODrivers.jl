@@ -90,7 +90,7 @@ function __setup_parse_block(block; id = :Optimizer)
     end
 
     if isnothing(version)
-        version = QUBODrivers.__VERSION__
+        version = QUBODrivers.__version__()
     end
 
     if isnothing(attributes)

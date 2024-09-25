@@ -11,7 +11,7 @@ This sampler selects precisely the state vector provided as warm-start.
 """
 QUBODrivers.@setup Optimizer begin
     name    = "Identity Sampler"
-    version = QUBODrivers.__VERSION__
+    version = QUBODrivers.__version__()
 end
 
 function sample_state(sampler::Optimizer{T}, n::Integer) where {T}
