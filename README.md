@@ -9,16 +9,16 @@
     <a href="https://arxiv.org/abs/2307.02577">
         <img src="https://img.shields.io/badge/arXiv-2307.02577-b31b1b.svg" alt="arXiv"/>
     </a>
-    <a href="https://codecov.io/gh/psrenergy/QUBODrivers.jl">
-        <img src="https://codecov.io/gh/psrenergy/QUBODrivers.jl/branch/master/graph/badge.svg?token=729WFU0752"/>
+    <a href="https://codecov.io/gh/JuliaQUBO/QUBODrivers.jl">
+        <img src="https://codecov.io/gh/JuliaQUBO/QUBODrivers.jl/branch/master/graph/badge.svg?token=729WFU0752"/>
     </a>
-    <a href="https://github.com/psrenergy/QUBODrivers.jl/actions/workflows/ci.yml">
-        <img src="https://github.com/psrenergy/QUBODrivers.jl/actions/workflows/ci.yml/badge.svg?branch=master" alt="CI" />
+    <a href="https://github.com/JuliaQUBO/QUBODrivers.jl/actions/workflows/ci.yml">
+        <img src="https://github.com/JuliaQUBO/QUBODrivers.jl/actions/workflows/ci.yml/badge.svg?branch=master" alt="CI" />
     </a>
     <a href="https://www.youtube.com/watch?v=OTmzlTbqdNo">
         <img src="https://img.shields.io/badge/JuliaCon-2022-9558b2" alt="JuliaCon 2022">
     </a>
-    <a href="https://psrenergy.github.io/QUBODrivers.jl/dev">
+    <a href="https://JuliaQUBO.github.io/QUBODrivers.jl/dev">
         <img src="https://img.shields.io/badge/docs-dev-blue.svg" alt="Docs">
     </a>
     <a href="https://zenodo.org/badge/latestdoi/623618138">
@@ -27,8 +27,8 @@
 </div>
 
 ## Introduction
-This package aims to provide a common [MOI](https://github.com/jump-dev/MathOptInterface.jl)-compliant API for [QUBO](https://en.wikipedia.org/wiki/Quadratic_unconstrained_binary_optimization) Sampling and Annealing machines.
-It also contains a few testing tools, including utility samplers for performance comparison and sanity checks, and some basic analysis features.
+This package aims to provide a common [MOI](https://github.com/jump-dev/MathOptInterface.jl)-compliant API for [QUBO](https://en.wikipedia.org/wiki/Quadratic_unconstrained_binary_optimization) sampling devices.
+It also contains a few additional tools, including utility samplers and a simple test suite.
 
 ### QUBO
 Problems assigned to solvers defined within QUBODrivers.jl's interface are given by
@@ -75,13 +75,24 @@ for i = 1:result_count(model)
 end
 ```
 
-## Badge
-If your project is using [QUBODrivers.jl](https://github.com/psrenergy/QUBODrivers.jl), consider adding the official badge to your project's README file:
+## List of [QUBODrivers.jl](https://github.com/JuliaQUBO/QUBODrivers.jl)-powered packages
 
-[![QUBODRIVERS](https://img.shields.io/badge/Powered%20by-QUBODrivers.jl-%20%234063d8)](https://github.com/psrenergy/QUBODrivers.jl)
+| Package                                                           |  Solvers                                         |
+| :---------------------------------------------------------------- | :----------------------------------------------- |
+| [`QUBODrivers.jl`](https://github.com/JuliaQUBO/QUBODrivers.jl)   | `ExactSampler` `RandomSampler` `IdentitySampler` |
+| [`QiskitOpt.jl`](https://github.com/JuliaQUBO/QiskitOpt.jl)       | `QiskitOpt.QAOA` `QiskitOpt.VQE`                 |
+| [`DWave.jl`](https://github.com/JuliaQUBO/DWave.jl)               | `DWave` `DWave.Neal`                             |
+| [`PySA.jl`](https://github.com/JuliaQUBO/PySA.jl)                 | `PySA`                                           |
+| [`CIMOptimizer.jl`](https://github.com/JuliaQUBO/CIMOptimizer.jl) | `CIMOptimizer`                                   |
+| [`MQLib.jl`](https://github.com/JuliaQUBO/MQLib.jl)               | `MQLib`                                          |
+
+## Badge
+If your project is using [QUBODrivers.jl](https://github.com/JuliaQUBO/QUBODrivers.jl), consider adding the official badge to your project's README file:
+
+[![QUBODRIVERS](https://img.shields.io/badge/Powered%20by-QUBODrivers.jl-%20%234063d8)](https://github.com/JuliaQUBO/QUBODrivers.jl)
 
 ```md
-[![QUBODRIVERS](https://img.shields.io/badge/Powered%20by-QUBODrivers.jl-%20%234063d8)](https://github.com/psrenergy/QUBODrivers.jl)
+[![QUBODRIVERS](https://img.shields.io/badge/Powered%20by-QUBODrivers.jl-%20%234063d8)](https://github.com/JuliaQUBO/QUBODrivers.jl)
 ```
 
 ---
