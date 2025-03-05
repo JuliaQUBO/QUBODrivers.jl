@@ -6,14 +6,14 @@ MOI.supports_constraint(
 ) = false
 
 # ~ They are also binary
-MOI.supports_constraint(::AbstractSampler, ::Type{VI}, ::Type{MOI.ZeroOne}) = true
+MOI.supports_constraint(::AbstractSampler{T}, ::Type{VI}, ::Type{MOI.ZeroOne}) where {T} = true
 
-MOI.supports_constraint(::AbstractSampler, ::Type{VI}, ::Type{Spin}) = true
+MOI.supports_constraint(::AbstractSampler{T}, ::Type{VI}, ::Type{Spin}) where {T} = true
 
 # ~ Objective Function Support
-MOI.supports(::AbstractSampler, ::MOI.ObjectiveFunction{<:Any}) = false
+MOI.supports(::AbstractSampler{T}, ::MOI.ObjectiveFunction{<:Any}) where {T} = false
 
-MOI.supports(::AbstractSampler, ::MOI.ObjectiveSense) = true
+MOI.supports(::AbstractSampler{T}, ::MOI.ObjectiveSense) where {T} = true
 
 MOI.supports(
     ::AbstractSampler{T},
@@ -21,10 +21,10 @@ MOI.supports(
 ) where {T} = true
 
 # By default, all samplers are their own raw solvers.
-MOI.get(sampler::AbstractSampler, ::MOI.RawSolver) = sampler
+MOI.get(sampler::AbstractSampler{T}, ::MOI.RawSolver) where {T} = sampler
 
 # Since problems are unconstrained, all available solutions are feasible.
-function MOI.get(sampler::AbstractSampler, ps::MOI.PrimalStatus)
+function MOI.get(sampler::AbstractSampler{T}, ps::MOI.PrimalStatus) where {T}
     m = MOI.get(sampler, MOI.ResultCount())
     i = ps.result_index
 
@@ -36,7 +36,7 @@ function MOI.get(sampler::AbstractSampler, ps::MOI.PrimalStatus)
 end
 
 # No constraints, no dual solutions
-MOI.get(::AbstractSampler, ::MOI.DualStatus) = MOI.NO_SOLUTION
+MOI.get(::AbstractSampler{T}, ::MOI.DualStatus) where {T} = MOI.NO_SOLUTION
 
 
 # ~*~ :: MathOptInterface :: ~*~ #
@@ -46,11 +46,11 @@ function MOI.empty!(sampler::AbstractSampler{T}) where {T}
     return sampler
 end
 
-function MOI.is_empty(sampler::AbstractSampler)
+function MOI.is_empty(sampler::AbstractSampler{T}) where {T}
     return isempty(QUBOTools.backend(sampler))
 end
 
-function MOI.optimize!(sampler::AbstractSampler)
+function MOI.optimize!(sampler::AbstractSampler{T}) where {T}
     return _sample!(sampler)
 end
 
@@ -67,7 +67,7 @@ function MOI.copy_to(sampler::AbstractSampler{T}, src::MOI.ModelLike) where {T}
     return MOIU.identity_index_map(src)
 end
 
-function MOI.get(sampler::AbstractSampler, ::MOI.RawStatusString)
+function MOI.get(sampler::AbstractSampler{T}, ::MOI.RawStatusString) where {T}
     solution_metadata = QUBOTools.metadata(QUBOTools.solution(sampler))
 
     if !haskey(solution_metadata, "status")
@@ -77,13 +77,13 @@ function MOI.get(sampler::AbstractSampler, ::MOI.RawStatusString)
     end
 end
 
-MOI.supports(::AbstractSampler, ::MOI.RawStatusString) = true
+MOI.supports(::AbstractSampler{T}, ::MOI.RawStatusString) where {T} = true
 
-function MOI.get(sampler::AbstractSampler, ::MOI.ResultCount)
+function MOI.get(sampler::AbstractSampler{T}, ::MOI.ResultCount) where {T}
     return length(QUBOTools.solution(sampler))
 end
 
-function MOI.get(sampler::AbstractSampler, ::MOI.TerminationStatus)
+function MOI.get(sampler::AbstractSampler{T}, ::MOI.TerminationStatus) where {T}
     ω = QUBOTools.solution(sampler)
 
     if isempty(ω)
@@ -110,7 +110,7 @@ function MOI.get(sampler::AbstractSampler{T}, ::MOI.ObjectiveSense) where {T}
     end
 end
 
-function MOI.get(sampler::AbstractSampler, ov::MOI.ObjectiveValue)
+function MOI.get(sampler::AbstractSampler{T}, ov::MOI.ObjectiveValue) where {T}
     i = ov.result_index
     ω = QUBOTools.solution(sampler)
     m = length(ω)
@@ -124,7 +124,7 @@ function MOI.get(sampler::AbstractSampler, ov::MOI.ObjectiveValue)
     return QUBOTools.value(ω, i)
 end
 
-function MOI.get(sampler::AbstractSampler, ::MOI.SolveTimeSec)
+function MOI.get(sampler::AbstractSampler{T}, ::MOI.SolveTimeSec) where {T}
     return QUBOTools.effective_time(QUBOTools.solution(sampler))
 end
 
@@ -145,6 +145,26 @@ function MOI.get(sampler::AbstractSampler{T}, vp::MOI.VariablePrimal, vi::VI) wh
     return convert(T, s)
 end
 
-function MOI.get(sampler::AbstractSampler, ::MOI.NumberOfVariables)
+function MOI.get(sampler::AbstractSampler{T}, ::MOI.NumberOfVariables) where {T}
     return QUBOTools.dimension(sampler)
+end
+
+function MOI.get(sampler::AbstractSampler{T}, ::MOI.ListOfConstraintTypesPresent) where {T}
+    if iszero(MOI.get(sampler, MOI.NumberOfVariables()))
+        return []
+    end
+
+    if QUBOTools.domain(sampler) === QUBOTools.BoolDomain
+        return [(VI, MOI.ZeroOne)]
+    else # QUBOTools.domain(sampler) === QUBOTools.SpinDomain
+        return [(VI, Spin)]
+    end
+end
+
+function MOI.get(sampler::AbstractSampler{T}, ::MOI.ListOfVariableIndices) where {T}
+    return Vector{VI}(QUBOTools.variables(sampler))
+end
+
+function MOI.supports(sampler::AbstractSampler{T}, ::MOIB.ListOfNonstandardBridges{T}) where {T}
+    return false
 end
