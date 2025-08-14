@@ -222,9 +222,6 @@ function __setup_quote_moi_attrs(spec::_SamplerSpec)
             return nothing
         end
 
-        # MOI.NumberOfThreads - Support
-        MOI.supports(::$(Optimizer), ::Union{MOI.NumberOfThreads, raw_attr"moi/numberofthreads"}) = true
-
         # MOI.VariablePrimalStart - get
         function MOI.get(sampler::$(Optimizer), ::MOI.VariablePrimalStart, vi::VI)
             i = QUBOTools.index(sampler, vi)
