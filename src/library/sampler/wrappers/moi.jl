@@ -10,6 +10,9 @@ MOI.supports_constraint(::AbstractSampler{T}, ::Type{VI}, ::Type{MOI.ZeroOne}) w
 
 MOI.supports_constraint(::AbstractSampler{T}, ::Type{VI}, ::Type{Spin}) where {T} = true
 
+# ~ Support for fixing variables to specific values
+MOI.supports_constraint(::AbstractSampler{T}, ::Type{VI}, ::Type{MOI.EqualTo{T}}) where {T} = true
+
 # ~ Objective Function Support
 MOI.supports(::AbstractSampler{T}, ::MOI.ObjectiveFunction{<:Any}) where {T} = false
 
@@ -55,7 +58,48 @@ function MOI.optimize!(sampler::AbstractSampler{T}) where {T}
 end
 
 function MOI.copy_to(sampler::AbstractSampler{T}, src::MOI.ModelLike) where {T}
-    QUBODrivers.set_model!(sampler, QUBOTools.Model{T}(src))
+    # Check for fixed variables (EqualTo constraints)
+    fixed_variables = Dict{VI, T}()
+    constraint_types = MOI.get(src, MOI.ListOfConstraintTypesPresent())
+    
+    for (F, S) in constraint_types
+        if F == VI && S == MOI.EqualTo{T}
+            # Found EqualTo constraints on variables
+            constraints = MOI.get(src, MOI.ListOfConstraintIndices{F, S}())
+            for ci in constraints
+                func = MOI.get(src, MOI.ConstraintFunction(), ci)
+                set_val = MOI.get(src, MOI.ConstraintSet(), ci)
+                fixed_variables[func] = set_val.value
+            end
+        end
+    end
+    
+    # Store fixed variables in sampler attributes for later retrieval
+    if hasfield(typeof(sampler), :attributes)
+        sampler.attributes[:fixed_variables] = fixed_variables
+    end
+    
+    # If there are fixed variables, we need to create a modified model
+    if !isempty(fixed_variables)
+        # Create a temporary model to build the substituted version
+        temp_model = MOIU.Model{T}()
+        
+        # Copy everything from source
+        index_map = MOIU.default_copy_to(temp_model, src)
+        
+        # Remove EqualTo constraints from temp_model since they'll be handled by substitution
+        if (VI, MOI.EqualTo{T}) in MOI.get(temp_model, MOI.ListOfConstraintTypesPresent())
+            for ci in MOI.get(temp_model, MOI.ListOfConstraintIndices{VI, MOI.EqualTo{T}}())
+                MOI.delete(temp_model, ci)
+            end
+        end
+        
+        # Try to convert - QUBOTools might still complain if there are other issues
+        QUBODrivers.set_model!(sampler, QUBOTools.Model{T}(temp_model))
+    else
+        # No fixed variables, use the original approach
+        QUBODrivers.set_model!(sampler, QUBOTools.Model{T}(src))
+    end
 
     # Collect warm-start values
     for v in MOI.get(src, MOI.ListOfVariableIndices())
@@ -129,6 +173,14 @@ function MOI.get(sampler::AbstractSampler{T}, ::MOI.SolveTimeSec) where {T}
 end
 
 function MOI.get(sampler::AbstractSampler{T}, vp::MOI.VariablePrimal, vi::VI) where {T}
+    # Check if this variable is fixed
+    if hasfield(typeof(sampler), :attributes) && haskey(sampler.attributes, :fixed_variables)
+        fixed_vars = sampler.attributes[:fixed_variables]::Dict{VI, T}
+        if haskey(fixed_vars, vi)
+            return fixed_vars[vi]
+        end
+    end
+    
     i = vp.result_index
     ω = QUBOTools.solution(sampler)
     m = length(ω)

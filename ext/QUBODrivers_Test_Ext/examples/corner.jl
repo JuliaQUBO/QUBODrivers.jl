@@ -25,7 +25,7 @@ function _test_corner_blanks(
         # Build Model
         model = MOI.instantiate(sampler; with_bridge_type = T)
 
-        c    = [1, 1]
+        c    = T[1, 1]
         i    = [1, 3]
         x, _ = MOI.add_constrained_variables(model, fill(MOI.ZeroOne(), 3))
 

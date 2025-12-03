@@ -3,10 +3,14 @@ module QUBODrivers_Test_Ext
 import Test
 import QUBODrivers
 import MathOptInterface as MOI
+using QUBOTools: ↑, ↓
 
 const VI     = MOI.VariableIndex
 const SAF{T} = MOI.ScalarAffineFunction{T}
+const SAT{T} = MOI.ScalarAffineTerm{T}
 const SQF{T} = MOI.ScalarQuadraticFunction{T}
+const SQT{T} = MOI.ScalarQuadraticTerm{T}
+const Spin   = QUBODrivers.Spin
 
 # Interface Tests
 include("interface/moi.jl")

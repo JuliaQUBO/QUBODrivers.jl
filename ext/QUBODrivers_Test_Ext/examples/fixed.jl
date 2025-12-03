@@ -8,7 +8,7 @@ function _test_fixed_variables(
         model = MOI.instantiate(sampler; with_bridge_type = T)
 
         Q    = T[1 2 3; 0 4 5; 0 0 6]
-        x, _ = MOI.add_constrained_variables(model, fill(MOI.ZeroOne, 3))
+        x, _ = MOI.add_constrained_variables(model, fill(MOI.ZeroOne(), 3))
 
         MOI.set(
             model,
@@ -31,7 +31,7 @@ function _test_fixed_variables(
         Test.@test MOI.get(model, MOI.ResultCount()) > 0
 
         for ri = 1:MOI.get(model, MOI.ResultCount())
-            Test.@test MOI.get(model, MOI.VariablePrimal(ri)) |> isone
+            Test.@test MOI.get(model, MOI.VariablePrimal(ri), x[2]) |> isone
         end
     end
 
