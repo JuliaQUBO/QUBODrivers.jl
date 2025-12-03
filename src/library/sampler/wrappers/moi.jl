@@ -75,9 +75,7 @@ function MOI.copy_to(sampler::AbstractSampler{T}, src::MOI.ModelLike) where {T}
     end
     
     # Store fixed variables in sampler attributes for later retrieval
-    if hasfield(typeof(sampler), :attributes)
-        sampler.attributes[:fixed_variables] = fixed_variables
-    end
+    _store_fixed_variables!(sampler, fixed_variables)
     
     # If there are fixed variables, we need to create a modified model
     if !isempty(fixed_variables)
@@ -85,7 +83,7 @@ function MOI.copy_to(sampler::AbstractSampler{T}, src::MOI.ModelLike) where {T}
         temp_model = MOIU.Model{T}()
         
         # Copy everything from source
-        index_map = MOIU.default_copy_to(temp_model, src)
+        MOIU.default_copy_to(temp_model, src)
         
         # Remove EqualTo constraints from temp_model since they'll be handled by substitution
         if (VI, MOI.EqualTo{T}) in MOI.get(temp_model, MOI.ListOfConstraintTypesPresent())
@@ -109,6 +107,22 @@ function MOI.copy_to(sampler::AbstractSampler{T}, src::MOI.ModelLike) where {T}
     end
 
     return MOIU.identity_index_map(src)
+end
+
+# Helper function to store fixed variables in sampler
+function _store_fixed_variables!(sampler::AbstractSampler{T}, fixed_variables::Dict{VI, T}) where {T}
+    if hasfield(typeof(sampler), :attributes) && isa(sampler.attributes, Dict)
+        sampler.attributes[:fixed_variables] = fixed_variables
+    end
+    return nothing
+end
+
+# Helper function to retrieve fixed variables from sampler
+function _get_fixed_variables(sampler::AbstractSampler{T}) where {T}
+    if hasfield(typeof(sampler), :attributes) && isa(sampler.attributes, Dict) && haskey(sampler.attributes, :fixed_variables)
+        return sampler.attributes[:fixed_variables]::Dict{VI, T}
+    end
+    return Dict{VI, T}()
 end
 
 function MOI.get(sampler::AbstractSampler{T}, ::MOI.RawStatusString) where {T}
@@ -174,11 +188,9 @@ end
 
 function MOI.get(sampler::AbstractSampler{T}, vp::MOI.VariablePrimal, vi::VI) where {T}
     # Check if this variable is fixed
-    if hasfield(typeof(sampler), :attributes) && haskey(sampler.attributes, :fixed_variables)
-        fixed_vars = sampler.attributes[:fixed_variables]::Dict{VI, T}
-        if haskey(fixed_vars, vi)
-            return fixed_vars[vi]
-        end
+    fixed_vars = _get_fixed_variables(sampler)
+    if haskey(fixed_vars, vi)
+        return fixed_vars[vi]
     end
     
     i = vp.result_index
