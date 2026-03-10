@@ -2,10 +2,12 @@
 
 set -euo pipefail
 
+# This test covers the two cleanup cases the workflow itself cannot exercise on
+# a normal PR run: preview exists and preview is already absent.
 repo_root="$(
     cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd
 )"
-cleanup_script="$repo_root/scripts/doc_preview_cleanup.sh"
+cleanup_script="$repo_root/.github/scripts/doc_preview_cleanup.sh"
 tmpdirs=()
 
 cleanup() {

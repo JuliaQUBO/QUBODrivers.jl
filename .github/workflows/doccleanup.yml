@@ -25,7 +25,7 @@ jobs:
       - name: Delete preview and history
         id: cleanup
         working-directory: gh-pages
-        run: bash ../repo/scripts/doc_preview_cleanup.sh
+        run: bash ../repo/.github/scripts/doc_preview_cleanup.sh
         env:
             PRNUM: ${{ github.event.number }}
 

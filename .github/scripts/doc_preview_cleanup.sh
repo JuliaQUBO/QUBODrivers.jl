@@ -2,6 +2,8 @@
 
 set -euo pipefail
 
+# Cleanup runs after PR close, so this logic lives in a versioned script that
+# can be regression-tested on PRs before the close event ever happens.
 : "${PRNUM:?PRNUM must be set}"
 
 preview_path="${PREVIEW_PATH:-previews/PR${PRNUM}}"
