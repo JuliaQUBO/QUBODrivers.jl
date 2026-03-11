@@ -313,7 +313,7 @@ function _accumulate_quadratic_term!(
         )
     end
 
-    quadratic_terms[xi, xj] = get(quadratic_terms, (xi, xj), zero(T)) + coefficient
+    quadratic_terms[(xi, xj)] = get(quadratic_terms, (xi, xj), zero(T)) + coefficient
 
     return offset
 end

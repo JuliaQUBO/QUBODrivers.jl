@@ -43,6 +43,19 @@ function _test_fixed_variable_reduction_helpers()
             Test.@test offset == 2.0
             Test.@test isempty(linear_terms)
             Test.@test quadratic_terms == Dict((xi, xj) => 5.0)
+
+            offset = QUBODrivers._accumulate_quadratic_term!(
+                linear_terms,
+                quadratic_terms,
+                Dict{VI,Float64}(),
+                xi,
+                xj,
+                3.0,
+                offset,
+            )
+
+            Test.@test offset == 2.0
+            Test.@test quadratic_terms == Dict((xi, xj) => 8.0)
         end
 
         let xi = VI(1), xj = VI(2)
