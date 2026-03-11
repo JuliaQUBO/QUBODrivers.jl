@@ -7,23 +7,30 @@ on:
 jobs:
   doc-preview-cleanup:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.ref }}
+          path: repo
+
       - name: Checkout gh-pages branch
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           ref: gh-pages
+          path: gh-pages
 
       - name: Delete preview and history
-        run: |
-            git config user.name "Documenter.jl"
-            git config user.email "documenter@juliadocs.github.io"
-            git rm -rf "previews/PR$PRNUM"
-            git commit -m "delete preview"
-            git branch gh-pages-new $(echo "delete history" | git commit-tree HEAD^{tree})
+        id: cleanup
+        working-directory: gh-pages
+        run: bash ../repo/.github/scripts/doc_preview_cleanup.sh
         env:
             PRNUM: ${{ github.event.number }}
 
       - name: Push changes
-        run: |
-            git push --force origin gh-pages-new:gh-pages
+        if: steps.cleanup.outputs.deleted == 'true'
+        working-directory: gh-pages
+        run: git push --force origin gh-pages-new:gh-pages
 # Workflow copied from https://github.com/CliMA/TimeMachine.jl
