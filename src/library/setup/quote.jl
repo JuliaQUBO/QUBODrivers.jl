@@ -7,6 +7,7 @@ function __setup_quote(spec::_SamplerSpec)
             attributes::Dict{Symbol,Any}
             moi_variables::Vector{VI}
             fixed_variables::Dict{VI,T}
+            fixed_constraint_types::Dict{VI,DataType}
 
             function $(Optimizer){T}() where {T}
                 return new{T}(
@@ -14,6 +15,7 @@ function __setup_quote(spec::_SamplerSpec)
                     Dict{Symbol,Any}(),
                     VI[],
                     Dict{VI,T}(),
+                    Dict{VI,DataType}(),
                 )
             end
         end

@@ -138,8 +138,10 @@ function _test_moi_fixed_variable_contracts(
         Test.@test_throws Exception MOI.set(optimizer, MOI.VariablePrimalStart(), x[2], zero(T))
         Test.@test MOI.set(optimizer, MOI.RawOptimizerAttribute("fixed_variables"), :user_fixed) === nothing
         Test.@test MOI.set(optimizer, MOI.RawOptimizerAttribute("moi_variables"), :user_variables) === nothing
+        Test.@test MOI.set(optimizer, MOI.RawOptimizerAttribute("fixed_constraint_types"), :user_types) === nothing
         Test.@test MOI.get(optimizer, MOI.RawOptimizerAttribute("fixed_variables")) == :user_fixed
         Test.@test MOI.get(optimizer, MOI.RawOptimizerAttribute("moi_variables")) == :user_variables
+        Test.@test MOI.get(optimizer, MOI.RawOptimizerAttribute("fixed_constraint_types")) == :user_types
         Test.@test MOI.get(optimizer, MOI.NumberOfVariables()) == length(x)
         Test.@test MOI.get(optimizer, MOI.ListOfVariableIndices()) == x
         Test.@test MOI.get(optimizer, MOI.VariablePrimalStart(), x[2]) == one(T)
@@ -164,38 +166,55 @@ function _test_moi_fixed_variable_constraint_types(
 ) where {T,S<:QUBODrivers.AbstractSampler{T}}
     Test.@testset "Fixed Variable Constraint Types" begin
         optimizer = sampler()
+        alt_type = T == Int ? Float64 : Int
+        alt_one = convert(alt_type, 1)
 
-        Test.@test MOI.supports_constraint(optimizer, VI, MOI.EqualTo{Int})
+        Test.@test MOI.supports_constraint(optimizer, VI, MOI.EqualTo{alt_type})
+        Test.@test MOI.supports_constraint(optimizer, VI, MOI.EqualTo{T})
 
         model = MOI.instantiate(sampler; with_bridge_type = T)
 
-        Q    = T[2 -3; 0 4]
-        x, _ = MOI.add_constrained_variables(model, fill(MOI.ZeroOne(), 2))
+        Q    = T[2 -3 1; 0 4 2; 0 0 3]
+        x, _ = MOI.add_constrained_variables(model, fill(MOI.ZeroOne(), 3))
 
         MOI.set(model, MOI.ObjectiveSense(), MOI.MIN_SENSE)
         MOI.set(model, MOI.ObjectiveFunction{SQF{T}}(), x' * Q * x)
 
-        MOI.add_constraint(model, x[1], MOI.EqualTo(1))
+        MOI.add_constraint(model, x[1], MOI.EqualTo(alt_one))
+        MOI.add_constraint(model, x[2], MOI.EqualTo(one(T)))
 
         config!(model)
         MOI.optimize!(model)
 
         optimizer = MOI.get(model, MOI.RawSolver())
         result_count = MOI.get(model, MOI.ResultCount())
-        fixed_constraint_indices = MOI.get(
+        typed_constraint_indices = MOI.get(
             optimizer,
-            MOI.ListOfConstraintIndices{VI,MOI.EqualTo{Int}}(),
+            MOI.ListOfConstraintIndices{VI,MOI.EqualTo{T}}(),
         )
+        alt_constraint_indices = MOI.get(
+            optimizer,
+            MOI.ListOfConstraintIndices{VI,MOI.EqualTo{alt_type}}(),
+        )
+        constraint_types = MOI.get(optimizer, MOI.ListOfConstraintTypesPresent())
 
         Test.@test result_count > 0
-        Test.@test MOI.get(optimizer, MOI.NumberOfConstraints{VI,MOI.EqualTo{Int}}()) == 1
-        Test.@test length(fixed_constraint_indices) == 1
-        Test.@test MOI.is_valid(optimizer, only(fixed_constraint_indices))
-        Test.@test MOI.get(optimizer, MOI.ConstraintFunction(), only(fixed_constraint_indices)) == x[1]
-        Test.@test MOI.get(optimizer, MOI.ConstraintSet(), only(fixed_constraint_indices)) == MOI.EqualTo(1)
+        Test.@test (VI, MOI.EqualTo{alt_type}) in constraint_types
+        Test.@test (VI, MOI.EqualTo{T}) in constraint_types
+        Test.@test MOI.get(optimizer, MOI.NumberOfConstraints{VI,MOI.EqualTo{alt_type}}()) == 1
+        Test.@test MOI.get(optimizer, MOI.NumberOfConstraints{VI,MOI.EqualTo{T}}()) == 1
+        Test.@test length(typed_constraint_indices) == 1
+        Test.@test length(alt_constraint_indices) == 1
+        Test.@test MOI.is_valid(optimizer, only(typed_constraint_indices))
+        Test.@test MOI.is_valid(optimizer, only(alt_constraint_indices))
+        Test.@test MOI.get(optimizer, MOI.ConstraintFunction(), only(typed_constraint_indices)) == x[2]
+        Test.@test MOI.get(optimizer, MOI.ConstraintFunction(), only(alt_constraint_indices)) == x[1]
+        Test.@test MOI.get(optimizer, MOI.ConstraintSet(), only(typed_constraint_indices)) == MOI.EqualTo(one(T))
+        Test.@test MOI.get(optimizer, MOI.ConstraintSet(), only(alt_constraint_indices)) == MOI.EqualTo(alt_one)
 
         for ri = 1:result_count
             Test.@test MOI.get(model, MOI.VariablePrimal(ri), x[1]) == one(T)
+            Test.@test MOI.get(model, MOI.VariablePrimal(ri), x[2]) == one(T)
         end
     end
 

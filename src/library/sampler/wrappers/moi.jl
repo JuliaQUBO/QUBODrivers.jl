@@ -43,6 +43,7 @@ MOI.get(::AbstractSampler{T}, ::MOI.DualStatus) where {T} = MOI.NO_SOLUTION
 
 const _MOI_VARIABLES_KEY = Symbol("QUBODrivers/moi_variables")
 const _FIXED_VARIABLES_KEY = Symbol("QUBODrivers/fixed_variables")
+const _FIXED_CONSTRAINT_TYPES_KEY = Symbol("QUBODrivers/fixed_constraint_types")
 
 
 # ~*~ :: MathOptInterface :: ~*~ #
@@ -50,6 +51,7 @@ function MOI.empty!(sampler::AbstractSampler{T}) where {T}
     QUBODrivers.set_model!(sampler, QUBOTools.Model{VI,T,Int}())
     _store_moi_variables!(sampler, VI[])
     _store_fixed_variables!(sampler, Dict{VI,T}())
+    _store_fixed_constraint_types!(sampler, Dict{VI,DataType}())
 
     return sampler
 end
@@ -64,10 +66,11 @@ end
 
 function MOI.copy_to(sampler::AbstractSampler{T}, src::MOI.ModelLike) where {T}
     variables = collect(MOI.get(src, MOI.ListOfVariableIndices()))
-    fixed_variables = _collect_fixed_variables(src, T)
+    fixed_variables, fixed_constraint_types = _collect_fixed_variables(src, T)
 
     _store_moi_variables!(sampler, variables)
     _store_fixed_variables!(sampler, fixed_variables)
+    _store_fixed_constraint_types!(sampler, fixed_constraint_types)
 
     model = isempty(fixed_variables) ? QUBOTools.Model{T}(src) :
         _build_model_with_fixed_variables(T, src, variables, fixed_variables)
@@ -118,6 +121,19 @@ function _store_fixed_variables!(sampler::AbstractSampler{T}, fixed_variables::D
     return nothing
 end
 
+function _store_fixed_constraint_types!(
+    sampler::AbstractSampler,
+    fixed_constraint_types::Dict{VI,DataType},
+)
+    if hasfield(typeof(sampler), :fixed_constraint_types)
+        sampler.fixed_constraint_types = fixed_constraint_types
+    elseif hasfield(typeof(sampler), :attributes) && isa(sampler.attributes, Dict)
+        sampler.attributes[_FIXED_CONSTRAINT_TYPES_KEY] = fixed_constraint_types
+    end
+
+    return nothing
+end
+
 # Helper function to retrieve fixed variables from sampler
 function _get_fixed_variables(sampler::AbstractSampler{T}) where {T}
     if hasfield(typeof(sampler), :fixed_variables)
@@ -131,17 +147,37 @@ function _get_fixed_variables(sampler::AbstractSampler{T}) where {T}
     return Dict{VI, T}()
 end
 
-function _fixed_constraint_variables(sampler::AbstractSampler{T}) where {T}
-    fixed_variables = _get_fixed_variables(sampler)
+function _get_fixed_constraint_types(sampler::AbstractSampler)
+    if hasfield(typeof(sampler), :fixed_constraint_types)
+        return sampler.fixed_constraint_types::Dict{VI,DataType}
+    elseif hasfield(typeof(sampler), :attributes) &&
+       isa(sampler.attributes, Dict) &&
+       haskey(sampler.attributes, _FIXED_CONSTRAINT_TYPES_KEY)
+        return sampler.attributes[_FIXED_CONSTRAINT_TYPES_KEY]::Dict{VI,DataType}
+    end
 
-    return [vi for vi in _get_moi_variables(sampler) if haskey(fixed_variables, vi)]
+    return Dict{VI,DataType}()
+end
+
+function _fixed_constraint_variables(sampler::AbstractSampler{T}, ::Type{S}) where {T,S<:Real}
+    fixed_variables = _get_fixed_variables(sampler)
+    fixed_constraint_types = _get_fixed_constraint_types(sampler)
+
+    if isempty(fixed_constraint_types)
+        return S == T ? [vi for vi in _get_moi_variables(sampler) if haskey(fixed_variables, vi)] : VI[]
+    end
+
+    return [
+        vi for vi in _get_moi_variables(sampler) if
+        haskey(fixed_variables, vi) && get(fixed_constraint_types, vi, T) == S
+    ]
 end
 
 function _fixed_constraint_variable(
     sampler::AbstractSampler{T},
     ci::MOI.ConstraintIndex{VI,MOI.EqualTo{S}},
 ) where {T,S<:Real}
-    fixed_constraint_variables = _fixed_constraint_variables(sampler)
+    fixed_constraint_variables = _fixed_constraint_variables(sampler, S)
     i = ci.value
     n = length(fixed_constraint_variables)
 
@@ -245,6 +281,7 @@ end
 
 function _collect_fixed_variables(::Type{T}, src::MOI.ModelLike, domain::Symbol) where {T}
     fixed_variables = Dict{VI,T}()
+    fixed_constraint_types = Dict{VI,DataType}()
 
     for (F, S) in MOI.get(src, MOI.ListOfConstraintTypesPresent())
         if F != VI || !(S <: MOI.EqualTo)
@@ -254,26 +291,30 @@ function _collect_fixed_variables(::Type{T}, src::MOI.ModelLike, domain::Symbol)
         for ci in MOI.get(src, MOI.ListOfConstraintIndices{F,S}())
             vi = MOI.get(src, MOI.ConstraintFunction(), ci)
             value = convert(T, MOI.get(src, MOI.ConstraintSet(), ci).value)
+            value_type = S.parameters[1]
 
             _validate_fixed_value(domain, vi, value)
 
             if haskey(fixed_variables, vi)
                 fixed_variables[vi] == value ||
                     throw(ArgumentError("Conflicting fixed values for variable '$vi'"))
+                fixed_constraint_types[vi] == value_type ||
+                    throw(ArgumentError("Conflicting fixed constraint types for variable '$vi'"))
                 continue
             end
 
             fixed_variables[vi] = value
+            fixed_constraint_types[vi] = value_type
         end
     end
 
-    return fixed_variables
+    return fixed_variables, fixed_constraint_types
 end
 
 function _collect_fixed_variables(src::MOI.ModelLike, ::Type{T}) where {T}
     variables = Set{VI}(MOI.get(src, MOI.ListOfVariableIndices()))
 
-    isempty(variables) && return Dict{VI,T}()
+    isempty(variables) && return Dict{VI,T}(), Dict{VI,DataType}()
 
     return _collect_fixed_variables(T, src, _variable_domain(src, variables))
 end
@@ -513,7 +554,7 @@ function MOI.get(
     sampler::AbstractSampler{T},
     ::MOI.NumberOfConstraints{VI,MOI.EqualTo{S}},
 ) where {T,S<:Real}
-    return length(_fixed_constraint_variables(sampler))
+    return length(_fixed_constraint_variables(sampler, S))
 end
 
 function MOI.get(sampler::AbstractSampler{T}, ::MOI.ListOfConstraintTypesPresent) where {T}
@@ -529,7 +570,24 @@ function MOI.get(sampler::AbstractSampler{T}, ::MOI.ListOfConstraintTypesPresent
         push!(constraint_types, (VI, Spin))
     end
 
-    isempty(_get_fixed_variables(sampler)) || push!(constraint_types, (VI, MOI.EqualTo{T}))
+    fixed_constraint_types = _get_fixed_constraint_types(sampler)
+
+    if isempty(fixed_constraint_types)
+        isempty(_get_fixed_variables(sampler)) || push!(constraint_types, (VI, MOI.EqualTo{T}))
+    else
+        equal_to_types = DataType[]
+
+        for vi in _get_moi_variables(sampler)
+            if haskey(fixed_constraint_types, vi)
+                S = fixed_constraint_types[vi]
+                S in equal_to_types || push!(equal_to_types, S)
+            end
+        end
+
+        for S in equal_to_types
+            push!(constraint_types, (VI, MOI.EqualTo{S}))
+        end
+    end
 
     return constraint_types
 end
@@ -544,7 +602,7 @@ function MOI.get(
 ) where {T,S<:Real}
     return MOI.ConstraintIndex{VI,MOI.EqualTo{S}}[
         MOI.ConstraintIndex{VI,MOI.EqualTo{S}}(i) for
-        i in 1:length(_fixed_constraint_variables(sampler))
+        i in 1:length(_fixed_constraint_variables(sampler, S))
     ]
 end
 
@@ -570,7 +628,7 @@ function MOI.is_valid(
     sampler::AbstractSampler{T},
     ci::MOI.ConstraintIndex{VI,MOI.EqualTo{S}},
 ) where {T,S<:Real}
-    return 1 <= ci.value <= length(_fixed_constraint_variables(sampler))
+    return 1 <= ci.value <= length(_fixed_constraint_variables(sampler, S))
 end
 
 function MOI.supports(::AbstractSampler{T}, ::MOIB.ListOfNonstandardBridges{S}) where {T,S}
