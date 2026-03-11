@@ -567,6 +567,6 @@ function MOI.is_valid(
     return 1 <= ci.value <= length(_fixed_constraint_variables(sampler))
 end
 
-function MOI.supports(sampler::AbstractSampler{T}, ::MOIB.ListOfNonstandardBridges{T}) where {T}
+function MOI.supports(::AbstractSampler{T}, ::MOIB.ListOfNonstandardBridges{S}) where {T,S}
     return false
 end

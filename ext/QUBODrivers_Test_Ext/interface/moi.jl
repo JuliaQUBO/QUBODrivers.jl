@@ -39,9 +39,13 @@ function _test_moi_interface_attributes(config!::Function, ::Type{S}) where {T,S
         Test.@testset "Attribute Access" begin
             let sampler = S()
                 config!(sampler)
-                
+
                 Test.@test MOI.get(sampler, MOI.SolverName())    isa AbstractString
                 Test.@test MOI.get(sampler, MOI.SolverVersion()) isa VersionNumber
+                Test.@test !MOI.supports(
+                    sampler,
+                    QUBODrivers.MOIB.ListOfNonstandardBridges{Int}(),
+                )
             end
         end
     end
