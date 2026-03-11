@@ -6,16 +6,14 @@ function __setup_quote(spec::_SamplerSpec)
             model::QUBOTools.Model{VI,T,Int}
             attributes::Dict{Symbol,Any}
             moi_variables::Vector{VI}
-            fixed_variables::Dict{VI,T}
-            fixed_constraint_types::Dict{VI,DataType}
+            fixed_variables::Dict{VI,QUBODrivers._FixedVariable{T}}
 
             function $(Optimizer){T}() where {T}
                 return new{T}(
                     QUBOTools.Model{VI,T,Int}(),
                     Dict{Symbol,Any}(),
                     VI[],
-                    Dict{VI,T}(),
-                    Dict{VI,DataType}(),
+                    Dict{VI,QUBODrivers._FixedVariable{T}}(),
                 )
             end
         end

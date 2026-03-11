@@ -138,10 +138,8 @@ function _test_moi_fixed_variable_contracts(
         Test.@test_throws Exception MOI.set(optimizer, MOI.VariablePrimalStart(), x[2], zero(T))
         Test.@test MOI.set(optimizer, MOI.RawOptimizerAttribute("fixed_variables"), :user_fixed) === nothing
         Test.@test MOI.set(optimizer, MOI.RawOptimizerAttribute("moi_variables"), :user_variables) === nothing
-        Test.@test MOI.set(optimizer, MOI.RawOptimizerAttribute("fixed_constraint_types"), :user_types) === nothing
         Test.@test MOI.get(optimizer, MOI.RawOptimizerAttribute("fixed_variables")) == :user_fixed
         Test.@test MOI.get(optimizer, MOI.RawOptimizerAttribute("moi_variables")) == :user_variables
-        Test.@test MOI.get(optimizer, MOI.RawOptimizerAttribute("fixed_constraint_types")) == :user_types
         Test.@test MOI.get(optimizer, MOI.NumberOfVariables()) == length(x)
         Test.@test MOI.get(optimizer, MOI.ListOfVariableIndices()) == x
         Test.@test MOI.get(optimizer, MOI.VariablePrimalStart(), x[2]) == one(T)

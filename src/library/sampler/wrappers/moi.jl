@@ -43,15 +43,21 @@ MOI.get(::AbstractSampler{T}, ::MOI.DualStatus) where {T} = MOI.NO_SOLUTION
 
 const _MOI_VARIABLES_KEY = Symbol("QUBODrivers/moi_variables")
 const _FIXED_VARIABLES_KEY = Symbol("QUBODrivers/fixed_variables")
-const _FIXED_CONSTRAINT_TYPES_KEY = Symbol("QUBODrivers/fixed_constraint_types")
+
+struct _FixedVariable{T}
+    value::T
+    set_type::DataType
+end
+
+_fixed_value(fixed_variables::AbstractDict{VI,T}, vi::VI) where {T<:Real} = fixed_variables[vi]
+_fixed_value(fixed_variables::AbstractDict{VI,_FixedVariable{T}}, vi::VI) where {T} = fixed_variables[vi].value
 
 
 # ~*~ :: MathOptInterface :: ~*~ #
 function MOI.empty!(sampler::AbstractSampler{T}) where {T}
     QUBODrivers.set_model!(sampler, QUBOTools.Model{VI,T,Int}())
     _store_moi_variables!(sampler, VI[])
-    _store_fixed_variables!(sampler, Dict{VI,T}())
-    _store_fixed_constraint_types!(sampler, Dict{VI,DataType}())
+    _store_fixed_variables!(sampler, Dict{VI,_FixedVariable{T}}())
 
     return sampler
 end
@@ -66,11 +72,10 @@ end
 
 function MOI.copy_to(sampler::AbstractSampler{T}, src::MOI.ModelLike) where {T}
     variables = collect(MOI.get(src, MOI.ListOfVariableIndices()))
-    fixed_variables, fixed_constraint_types = _collect_fixed_variables(src, T)
+    fixed_variables = _collect_fixed_variables(src, T)
 
     _store_moi_variables!(sampler, variables)
     _store_fixed_variables!(sampler, fixed_variables)
-    _store_fixed_constraint_types!(sampler, fixed_constraint_types)
 
     model = isempty(fixed_variables) ? QUBOTools.Model{T}(src) :
         _build_model_with_fixed_variables(T, src, variables, fixed_variables)
@@ -112,7 +117,10 @@ function _get_moi_variables(sampler::AbstractSampler)
     return Vector{VI}(QUBOTools.variables(sampler))
 end
 
-function _store_fixed_variables!(sampler::AbstractSampler{T}, fixed_variables::Dict{VI, T}) where {T}
+function _store_fixed_variables!(
+    sampler::AbstractSampler{T},
+    fixed_variables::Dict{VI,_FixedVariable{T}},
+) where {T}
     if hasfield(typeof(sampler), :fixed_variables)
         sampler.fixed_variables = fixed_variables
     elseif hasfield(typeof(sampler), :attributes) && isa(sampler.attributes, Dict)
@@ -121,55 +129,25 @@ function _store_fixed_variables!(sampler::AbstractSampler{T}, fixed_variables::D
     return nothing
 end
 
-function _store_fixed_constraint_types!(
-    sampler::AbstractSampler,
-    fixed_constraint_types::Dict{VI,DataType},
-)
-    if hasfield(typeof(sampler), :fixed_constraint_types)
-        sampler.fixed_constraint_types = fixed_constraint_types
-    elseif hasfield(typeof(sampler), :attributes) && isa(sampler.attributes, Dict)
-        sampler.attributes[_FIXED_CONSTRAINT_TYPES_KEY] = fixed_constraint_types
-    end
-
-    return nothing
-end
-
 # Helper function to retrieve fixed variables from sampler
 function _get_fixed_variables(sampler::AbstractSampler{T}) where {T}
     if hasfield(typeof(sampler), :fixed_variables)
-        return sampler.fixed_variables::Dict{VI, T}
+        return sampler.fixed_variables::Dict{VI,_FixedVariable{T}}
     elseif hasfield(typeof(sampler), :attributes) &&
        isa(sampler.attributes, Dict) &&
        haskey(sampler.attributes, _FIXED_VARIABLES_KEY)
-        return sampler.attributes[_FIXED_VARIABLES_KEY]::Dict{VI, T}
+        return sampler.attributes[_FIXED_VARIABLES_KEY]::Dict{VI,_FixedVariable{T}}
     end
 
-    return Dict{VI, T}()
-end
-
-function _get_fixed_constraint_types(sampler::AbstractSampler)
-    if hasfield(typeof(sampler), :fixed_constraint_types)
-        return sampler.fixed_constraint_types::Dict{VI,DataType}
-    elseif hasfield(typeof(sampler), :attributes) &&
-       isa(sampler.attributes, Dict) &&
-       haskey(sampler.attributes, _FIXED_CONSTRAINT_TYPES_KEY)
-        return sampler.attributes[_FIXED_CONSTRAINT_TYPES_KEY]::Dict{VI,DataType}
-    end
-
-    return Dict{VI,DataType}()
+    return Dict{VI,_FixedVariable{T}}()
 end
 
 function _fixed_constraint_variables(sampler::AbstractSampler{T}, ::Type{S}) where {T,S<:Real}
     fixed_variables = _get_fixed_variables(sampler)
-    fixed_constraint_types = _get_fixed_constraint_types(sampler)
-
-    if isempty(fixed_constraint_types)
-        return S == T ? [vi for vi in _get_moi_variables(sampler) if haskey(fixed_variables, vi)] : VI[]
-    end
 
     return [
         vi for vi in _get_moi_variables(sampler) if
-        haskey(fixed_variables, vi) && get(fixed_constraint_types, vi, T) == S
+        haskey(fixed_variables, vi) && fixed_variables[vi].set_type == S
     ]
 end
 
@@ -192,7 +170,7 @@ function _get_variable_primal_start(sampler::AbstractSampler{T}, vi::VI) where {
     fixed_variables = _get_fixed_variables(sampler)
 
     if haskey(fixed_variables, vi)
-        return fixed_variables[vi]
+        return fixed_variables[vi].value
     end
 
     i = QUBOTools.index(sampler, vi)
@@ -208,7 +186,7 @@ function _set_variable_primal_start!(sampler::AbstractSampler{T}, vi::VI, value)
     fixed_variables = _get_fixed_variables(sampler)
 
     if haskey(fixed_variables, vi)
-        fixed_value = fixed_variables[vi]
+        fixed_value = fixed_variables[vi].value
 
         if !isnothing(value) && value != fixed_value
             error("Value for 'MOI.VariablePrimalStart' must match the fixed value '$fixed_value'")
@@ -280,8 +258,7 @@ function _validate_fixed_value(domain::Symbol, vi::VI, value::T) where {T}
 end
 
 function _collect_fixed_variables(::Type{T}, src::MOI.ModelLike, domain::Symbol) where {T}
-    fixed_variables = Dict{VI,T}()
-    fixed_constraint_types = Dict{VI,DataType}()
+    fixed_variables = Dict{VI,_FixedVariable{T}}()
 
     for (F, S) in MOI.get(src, MOI.ListOfConstraintTypesPresent())
         if F != VI || !(S <: MOI.EqualTo)
@@ -296,38 +273,37 @@ function _collect_fixed_variables(::Type{T}, src::MOI.ModelLike, domain::Symbol)
             _validate_fixed_value(domain, vi, value)
 
             if haskey(fixed_variables, vi)
-                fixed_variables[vi] == value ||
+                fixed_variables[vi].value == value ||
                     throw(ArgumentError("Conflicting fixed values for variable '$vi'"))
-                fixed_constraint_types[vi] == value_type ||
+                fixed_variables[vi].set_type == value_type ||
                     throw(ArgumentError("Conflicting fixed constraint types for variable '$vi'"))
                 continue
             end
 
-            fixed_variables[vi] = value
-            fixed_constraint_types[vi] = value_type
+            fixed_variables[vi] = _FixedVariable{T}(value, value_type)
         end
     end
 
-    return fixed_variables, fixed_constraint_types
+    return fixed_variables
 end
 
 function _collect_fixed_variables(src::MOI.ModelLike, ::Type{T}) where {T}
     variables = Set{VI}(MOI.get(src, MOI.ListOfVariableIndices()))
 
-    isempty(variables) && return Dict{VI,T}(), Dict{VI,DataType}()
+    isempty(variables) && return Dict{VI,_FixedVariable{T}}()
 
     return _collect_fixed_variables(T, src, _variable_domain(src, variables))
 end
 
 function _accumulate_affine_term!(
     linear_terms::Dict{VI,T},
-    fixed_variables::Dict{VI,T},
+    fixed_variables,
     vi::VI,
     coefficient::T,
     offset::T,
 ) where {T}
     if haskey(fixed_variables, vi)
-        return offset + coefficient * fixed_variables[vi]
+        return offset + coefficient * _fixed_value(fixed_variables, vi)
     end
 
     linear_terms[vi] = get(linear_terms, vi, zero(T)) + coefficient
@@ -338,7 +314,7 @@ end
 function _accumulate_quadratic_term!(
     linear_terms::Dict{VI,T},
     quadratic_terms::Dict{Tuple{VI,VI},T},
-    fixed_variables::Dict{VI,T},
+    fixed_variables,
     xi::VI,
     xj::VI,
     coefficient::T,
@@ -348,13 +324,13 @@ function _accumulate_quadratic_term!(
     xj_fixed = haskey(fixed_variables, xj)
 
     if xi_fixed && xj_fixed
-        return offset + coefficient * fixed_variables[xi] * fixed_variables[xj]
+        return offset + coefficient * _fixed_value(fixed_variables, xi) * _fixed_value(fixed_variables, xj)
     elseif xi_fixed
         return _accumulate_affine_term!(
             linear_terms,
             fixed_variables,
             xj,
-            coefficient * fixed_variables[xi],
+            coefficient * _fixed_value(fixed_variables, xi),
             offset,
         )
     elseif xj_fixed
@@ -362,7 +338,7 @@ function _accumulate_quadratic_term!(
             linear_terms,
             fixed_variables,
             xi,
-            coefficient * fixed_variables[xj],
+            coefficient * _fixed_value(fixed_variables, xj),
             offset,
         )
     end
@@ -380,7 +356,7 @@ function _build_model_with_fixed_variables(
     ::Type{T},
     src::MOI.ModelLike,
     variables::Vector{VI},
-    fixed_variables::Dict{VI,T},
+    fixed_variables,
 ) where {T}
     variable_set = Set{VI}(variables)
     free_variables = Set{VI}(filter(v -> !haskey(fixed_variables, v), variables))
@@ -537,7 +513,7 @@ function MOI.get(sampler::AbstractSampler{T}, vp::MOI.VariablePrimal, vi::VI) wh
 
     fixed_vars = _get_fixed_variables(sampler)
     if haskey(fixed_vars, vi)
-        return fixed_vars[vi]
+        return fixed_vars[vi].value
     end
 
     j = QUBOTools.index(sampler, vi)
@@ -570,23 +546,18 @@ function MOI.get(sampler::AbstractSampler{T}, ::MOI.ListOfConstraintTypesPresent
         push!(constraint_types, (VI, Spin))
     end
 
-    fixed_constraint_types = _get_fixed_constraint_types(sampler)
+    fixed_variables = _get_fixed_variables(sampler)
+    equal_to_types = DataType[]
 
-    if isempty(fixed_constraint_types)
-        isempty(_get_fixed_variables(sampler)) || push!(constraint_types, (VI, MOI.EqualTo{T}))
-    else
-        equal_to_types = DataType[]
-
-        for vi in _get_moi_variables(sampler)
-            if haskey(fixed_constraint_types, vi)
-                S = fixed_constraint_types[vi]
-                S in equal_to_types || push!(equal_to_types, S)
-            end
+    for vi in _get_moi_variables(sampler)
+        if haskey(fixed_variables, vi)
+            S = fixed_variables[vi].set_type
+            S in equal_to_types || push!(equal_to_types, S)
         end
+    end
 
-        for S in equal_to_types
-            push!(constraint_types, (VI, MOI.EqualTo{S}))
-        end
+    for S in equal_to_types
+        push!(constraint_types, (VI, MOI.EqualTo{S}))
     end
 
     return constraint_types
@@ -621,7 +592,7 @@ function MOI.get(
 ) where {T,S<:Real}
     vi = _fixed_constraint_variable(sampler, ci)
 
-    return MOI.EqualTo(convert(S, _get_fixed_variables(sampler)[vi]))
+    return MOI.EqualTo(convert(S, _get_fixed_variables(sampler)[vi].value))
 end
 
 function MOI.is_valid(
