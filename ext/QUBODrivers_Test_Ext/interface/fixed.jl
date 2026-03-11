@@ -48,8 +48,8 @@ function _test_fixed_variable_reduction_helpers()
                 linear_terms,
                 quadratic_terms,
                 Dict{VI,Float64}(),
-                xi,
                 xj,
+                xi,
                 3.0,
                 offset,
             )
@@ -123,6 +123,15 @@ function _test_moi_fixed_variable_contracts(
         Test.@test MOI.get(optimizer, MOI.NumberOfVariables()) == length(x)
         Test.@test MOI.get(optimizer, MOI.ListOfVariableIndices()) == x
         Test.@test (VI, MOI.ZeroOne) in MOI.get(optimizer, MOI.ListOfConstraintTypesPresent())
+        Test.@test (VI, MOI.EqualTo{T}) in MOI.get(optimizer, MOI.ListOfConstraintTypesPresent())
+        Test.@test MOI.get(optimizer, MOI.NumberOfConstraints{VI,MOI.EqualTo{T}}()) == 1
+
+        fixed_constraint_indices = MOI.get(optimizer, MOI.ListOfConstraintIndices{VI,MOI.EqualTo{T}}())
+
+        Test.@test length(fixed_constraint_indices) == 1
+        Test.@test MOI.is_valid(optimizer, only(fixed_constraint_indices))
+        Test.@test MOI.get(optimizer, MOI.ConstraintFunction(), only(fixed_constraint_indices)) == x[2]
+        Test.@test MOI.get(optimizer, MOI.ConstraintSet(), only(fixed_constraint_indices)) == MOI.EqualTo(one(T))
         Test.@test MOI.get(optimizer, MOI.VariablePrimalStart(), x[2]) == one(T)
         Test.@test MOI.set(optimizer, MOI.VariablePrimalStart(), x[2], one(T)) === nothing
         Test.@test MOI.set(optimizer, MOI.VariablePrimalStart(), x[2], nothing) === nothing

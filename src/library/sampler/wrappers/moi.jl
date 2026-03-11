@@ -104,10 +104,6 @@ function _get_moi_variables(sampler::AbstractSampler)
        isa(sampler.attributes, Dict) &&
        haskey(sampler.attributes, _MOI_VARIABLES_KEY)
         return sampler.attributes[_MOI_VARIABLES_KEY]::Vector{VI}
-    elseif hasfield(typeof(sampler), :attributes) &&
-       isa(sampler.attributes, Dict) &&
-       haskey(sampler.attributes, :moi_variables)
-        return sampler.attributes[:moi_variables]::Vector{VI}
     end
 
     return Vector{VI}(QUBOTools.variables(sampler))
@@ -130,13 +126,30 @@ function _get_fixed_variables(sampler::AbstractSampler{T}) where {T}
        isa(sampler.attributes, Dict) &&
        haskey(sampler.attributes, _FIXED_VARIABLES_KEY)
         return sampler.attributes[_FIXED_VARIABLES_KEY]::Dict{VI, T}
-    elseif hasfield(typeof(sampler), :attributes) &&
-       isa(sampler.attributes, Dict) &&
-       haskey(sampler.attributes, :fixed_variables)
-        return sampler.attributes[:fixed_variables]::Dict{VI, T}
     end
 
     return Dict{VI, T}()
+end
+
+function _fixed_constraint_variables(sampler::AbstractSampler{T}) where {T}
+    fixed_variables = _get_fixed_variables(sampler)
+
+    return [vi for vi in _get_moi_variables(sampler) if haskey(fixed_variables, vi)]
+end
+
+function _fixed_constraint_variable(
+    sampler::AbstractSampler{T},
+    ci::MOI.ConstraintIndex{VI,MOI.EqualTo{T}},
+) where {T}
+    fixed_constraint_variables = _fixed_constraint_variables(sampler)
+    i = ci.value
+    n = length(fixed_constraint_variables)
+
+    if !(1 <= i <= n)
+        error("Invalid constraint index '$i'; There are $(n) constraints")
+    end
+
+    return fixed_constraint_variables[i]
 end
 
 function _get_variable_primal_start(sampler::AbstractSampler{T}, vi::VI) where {T}
@@ -313,6 +326,10 @@ function _accumulate_quadratic_term!(
         )
     end
 
+    if xi.value > xj.value
+        xi, xj = xj, xi
+    end
+
     quadratic_terms[(xi, xj)] = get(quadratic_terms, (xi, xj), zero(T)) + coefficient
 
     return offset
@@ -366,6 +383,8 @@ function _build_model_with_fixed_variables(
             coefficient = term.coefficient
 
             if xi == xj
+                # MOI uses a 1/2 x'Qx convention for quadratic objectives, so
+                # diagonal terms contribute coefficient / 2 to x_i^2.
                 if domain === :bool
                     offset = _accumulate_affine_term!(
                         linear_terms,
@@ -490,20 +509,62 @@ function MOI.get(sampler::AbstractSampler{T}, ::MOI.NumberOfVariables) where {T}
     return length(_get_moi_variables(sampler))
 end
 
+function MOI.get(sampler::AbstractSampler{T}, ::MOI.NumberOfConstraints{VI,MOI.EqualTo{T}}) where {T}
+    return length(_fixed_constraint_variables(sampler))
+end
+
 function MOI.get(sampler::AbstractSampler{T}, ::MOI.ListOfConstraintTypesPresent) where {T}
     if iszero(MOI.get(sampler, MOI.NumberOfVariables()))
         return []
     end
 
+    constraint_types = Tuple{Type,Type}[]
+
     if QUBOTools.domain(sampler) === QUBOTools.BoolDomain
-        return [(VI, MOI.ZeroOne)]
+        push!(constraint_types, (VI, MOI.ZeroOne))
     else # QUBOTools.domain(sampler) === QUBOTools.SpinDomain
-        return [(VI, Spin)]
+        push!(constraint_types, (VI, Spin))
     end
+
+    isempty(_get_fixed_variables(sampler)) || push!(constraint_types, (VI, MOI.EqualTo{T}))
+
+    return constraint_types
 end
 
 function MOI.get(sampler::AbstractSampler{T}, ::MOI.ListOfVariableIndices) where {T}
     return copy(_get_moi_variables(sampler))
+end
+
+function MOI.get(sampler::AbstractSampler{T}, ::MOI.ListOfConstraintIndices{VI,MOI.EqualTo{T}}) where {T}
+    return MOI.ConstraintIndex{VI,MOI.EqualTo{T}}[
+        MOI.ConstraintIndex{VI,MOI.EqualTo{T}}(i) for
+        i in 1:length(_fixed_constraint_variables(sampler))
+    ]
+end
+
+function MOI.get(
+    sampler::AbstractSampler{T},
+    ::MOI.ConstraintFunction,
+    ci::MOI.ConstraintIndex{VI,MOI.EqualTo{T}},
+) where {T}
+    return _fixed_constraint_variable(sampler, ci)
+end
+
+function MOI.get(
+    sampler::AbstractSampler{T},
+    ::MOI.ConstraintSet,
+    ci::MOI.ConstraintIndex{VI,MOI.EqualTo{T}},
+) where {T}
+    vi = _fixed_constraint_variable(sampler, ci)
+
+    return MOI.EqualTo(_get_fixed_variables(sampler)[vi])
+end
+
+function MOI.is_valid(
+    sampler::AbstractSampler{T},
+    ci::MOI.ConstraintIndex{VI,MOI.EqualTo{T}},
+) where {T}
+    return 1 <= ci.value <= length(_fixed_constraint_variables(sampler))
 end
 
 function MOI.supports(sampler::AbstractSampler{T}, ::MOIB.ListOfNonstandardBridges{T}) where {T}
