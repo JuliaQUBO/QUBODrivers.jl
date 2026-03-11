@@ -41,6 +41,9 @@ end
 # No constraints, no dual solutions
 MOI.get(::AbstractSampler{T}, ::MOI.DualStatus) where {T} = MOI.NO_SOLUTION
 
+const _MOI_VARIABLES_KEY = Symbol("QUBODrivers/moi_variables")
+const _FIXED_VARIABLES_KEY = Symbol("QUBODrivers/fixed_variables")
+
 
 # ~*~ :: MathOptInterface :: ~*~ #
 function MOI.empty!(sampler::AbstractSampler{T}) where {T}
@@ -85,15 +88,23 @@ function MOI.copy_to(sampler::AbstractSampler{T}, src::MOI.ModelLike) where {T}
 end
 
 function _store_moi_variables!(sampler::AbstractSampler, variables::Vector{VI})
-    if hasfield(typeof(sampler), :attributes) && isa(sampler.attributes, Dict)
-        sampler.attributes[:moi_variables] = variables
+    if hasfield(typeof(sampler), :moi_variables)
+        sampler.moi_variables = variables
+    elseif hasfield(typeof(sampler), :attributes) && isa(sampler.attributes, Dict)
+        sampler.attributes[_MOI_VARIABLES_KEY] = variables
     end
 
     return nothing
 end
 
 function _get_moi_variables(sampler::AbstractSampler)
-    if hasfield(typeof(sampler), :attributes) &&
+    if hasfield(typeof(sampler), :moi_variables)
+        return sampler.moi_variables::Vector{VI}
+    elseif hasfield(typeof(sampler), :attributes) &&
+       isa(sampler.attributes, Dict) &&
+       haskey(sampler.attributes, _MOI_VARIABLES_KEY)
+        return sampler.attributes[_MOI_VARIABLES_KEY]::Vector{VI}
+    elseif hasfield(typeof(sampler), :attributes) &&
        isa(sampler.attributes, Dict) &&
        haskey(sampler.attributes, :moi_variables)
         return sampler.attributes[:moi_variables]::Vector{VI}
@@ -103,15 +114,23 @@ function _get_moi_variables(sampler::AbstractSampler)
 end
 
 function _store_fixed_variables!(sampler::AbstractSampler{T}, fixed_variables::Dict{VI, T}) where {T}
-    if hasfield(typeof(sampler), :attributes) && isa(sampler.attributes, Dict)
-        sampler.attributes[:fixed_variables] = fixed_variables
+    if hasfield(typeof(sampler), :fixed_variables)
+        sampler.fixed_variables = fixed_variables
+    elseif hasfield(typeof(sampler), :attributes) && isa(sampler.attributes, Dict)
+        sampler.attributes[_FIXED_VARIABLES_KEY] = fixed_variables
     end
     return nothing
 end
 
 # Helper function to retrieve fixed variables from sampler
 function _get_fixed_variables(sampler::AbstractSampler{T}) where {T}
-    if hasfield(typeof(sampler), :attributes) &&
+    if hasfield(typeof(sampler), :fixed_variables)
+        return sampler.fixed_variables::Dict{VI, T}
+    elseif hasfield(typeof(sampler), :attributes) &&
+       isa(sampler.attributes, Dict) &&
+       haskey(sampler.attributes, _FIXED_VARIABLES_KEY)
+        return sampler.attributes[_FIXED_VARIABLES_KEY]::Dict{VI, T}
+    elseif hasfield(typeof(sampler), :attributes) &&
        isa(sampler.attributes, Dict) &&
        haskey(sampler.attributes, :fixed_variables)
         return sampler.attributes[:fixed_variables]::Dict{VI, T}
