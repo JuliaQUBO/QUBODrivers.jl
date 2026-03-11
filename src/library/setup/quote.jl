@@ -5,9 +5,16 @@ function __setup_quote(spec::_SamplerSpec)
         Base.@__doc__ mutable struct $(Optimizer){T} <: QUBODrivers.AbstractSampler{T}
             model::QUBOTools.Model{VI,T,Int}
             attributes::Dict{Symbol,Any}
+            moi_variables::Vector{VI}
+            fixed_variables::Dict{VI,QUBODrivers._FixedVariable{T}}
 
             function $(Optimizer){T}() where {T}
-                return new{T}(QUBOTools.Model{VI,T,Int}(), Dict{Symbol,Any}())
+                return new{T}(
+                    QUBOTools.Model{VI,T,Int}(),
+                    Dict{Symbol,Any}(),
+                    VI[],
+                    Dict{VI,QUBODrivers._FixedVariable{T}}(),
+                )
             end
         end
 
@@ -224,32 +231,12 @@ function __setup_quote_moi_attrs(spec::_SamplerSpec)
 
         # MOI.VariablePrimalStart - get
         function MOI.get(sampler::$(Optimizer), ::MOI.VariablePrimalStart, vi::VI)
-            i = QUBOTools.index(sampler, vi)
-
-            return QUBOTools.start(sampler, i)
+            return QUBODrivers._get_variable_primal_start(sampler, vi)
         end
 
         # MOI.VariablePrimalStart - set
         function MOI.set(sampler::$(Optimizer){T}, ::MOI.VariablePrimalStart, vi::VI, value) where {T}
-            if !(isnothing(value) || value isa Real)
-                error("Value for 'MOI.VariablePrimalStart' must be an integer, or 'nothing'")
-            end
-
-            if !isnothing(value)
-                if !(value isa Real && isinteger(value))
-                    error("Value for 'MOI.VariablePrimalStart' must be an integer, or 'nothing'")
-                end
-
-                X = QUBOTools.domain(sampler)
-
-                if X === QUBOTools.BoolDomain && !(value == zero(value) || value == one(value))
-                    error("Integer value for 'MOI.VariablePrimalStart' must be either '0' or '1'")
-                elseif X === QUBOTools.SpinDomain && !(value == -one(value) || value == one(value))
-                    error("Integer value for 'MOI.VariablePrimalStart' must be either '-1' or '1'")
-                end
-            end
-
-            QUBOTools.attach!(sampler, vi => convert(Union{Integer, Nothing}, value))
+            QUBODrivers._set_variable_primal_start!(sampler, vi, value)
 
             return nothing
         end
