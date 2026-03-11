@@ -120,6 +120,54 @@ function _get_fixed_variables(sampler::AbstractSampler{T}) where {T}
     return Dict{VI, T}()
 end
 
+function _get_variable_primal_start(sampler::AbstractSampler{T}, vi::VI) where {T}
+    fixed_variables = _get_fixed_variables(sampler)
+
+    if haskey(fixed_variables, vi)
+        return fixed_variables[vi]
+    end
+
+    i = QUBOTools.index(sampler, vi)
+
+    return QUBOTools.start(sampler, i)
+end
+
+function _set_variable_primal_start!(sampler::AbstractSampler{T}, vi::VI, value) where {T}
+    if !(isnothing(value) || value isa Real)
+        error("Value for 'MOI.VariablePrimalStart' must be an integer, or 'nothing'")
+    end
+
+    fixed_variables = _get_fixed_variables(sampler)
+
+    if haskey(fixed_variables, vi)
+        fixed_value = fixed_variables[vi]
+
+        if !isnothing(value) && value != fixed_value
+            error("Value for 'MOI.VariablePrimalStart' must match the fixed value '$fixed_value'")
+        end
+
+        return nothing
+    end
+
+    if !isnothing(value)
+        if !(value isa Real && isinteger(value))
+            error("Value for 'MOI.VariablePrimalStart' must be an integer, or 'nothing'")
+        end
+
+        X = QUBOTools.domain(sampler)
+
+        if X === QUBOTools.BoolDomain && !(value == zero(value) || value == one(value))
+            error("Integer value for 'MOI.VariablePrimalStart' must be either '0' or '1'")
+        elseif X === QUBOTools.SpinDomain && !(value == -one(value) || value == one(value))
+            error("Integer value for 'MOI.VariablePrimalStart' must be either '-1' or '1'")
+        end
+    end
+
+    QUBOTools.attach!(sampler, vi => convert(Union{Integer, Nothing}, value))
+
+    return nothing
+end
+
 function _variable_domain(src::MOI.ModelLike, variables::Set{VI})
     bool_variables = Set{VI}()
     spin_variables = Set{VI}()

@@ -29,6 +29,11 @@ function _test_fixed_variables(
                 Test.@test MOI.get(model, MOI.ObjectiveValue(ri)) ≈ values' * Q * values
             end
 
+            optimizer = MOI.get(model, MOI.RawSolver())
+            Test.@test MOI.get(optimizer, MOI.VariablePrimalStart(), x[2]) == one(T)
+            Test.@test MOI.set(optimizer, MOI.VariablePrimalStart(), x[2], one(T)) === nothing
+            Test.@test MOI.set(optimizer, MOI.VariablePrimalStart(), x[2], nothing) === nothing
+            Test.@test_throws Exception MOI.set(optimizer, MOI.VariablePrimalStart(), x[2], zero(T))
             Test.@test_throws Exception MOI.get(model, MOI.VariablePrimal(result_count + 1), x[2])
         end
 
