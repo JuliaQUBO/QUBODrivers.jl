@@ -3,7 +3,7 @@ function _test_basic_bool_min(
     sampler::Type{S},
     n::Integer,
     Q::Matrix{T},
-) where {T,S<:AbstractSampler{T}}
+) where {T,S<:QUBODrivers.AbstractSampler{T}}
     Test.@testset "▷ Bool ⋄ Min" begin
         model = MOI.instantiate(sampler; with_bridge_type = T)
 
@@ -52,7 +52,7 @@ function _test_basic_bool_max(
     sampler::Type{S},
     n::Integer,
     Q::Matrix{T},
-) where {T,S<:AbstractSampler{T}}
+) where {T,S<:QUBODrivers.AbstractSampler{T}}
     Test.@testset "▷ Bool ⋄ Max" begin
         model = MOI.instantiate(sampler; with_bridge_type = T)
 
@@ -102,7 +102,7 @@ function _test_basic_spin_min(
     n::Integer,
     h::Vector{T},
     J::Matrix{T},
-) where {T,S<:AbstractSampler{T}}
+) where {T,S<:QUBODrivers.AbstractSampler{T}}
     Test.@testset "▷ Spin ⋄ Min" begin
         # Build Model
         model = MOI.instantiate(sampler; with_bridge_type = T)
@@ -153,7 +153,7 @@ function _test_basic_spin_max(
     n::Integer,
     h::Vector{T},
     J::Matrix{T},
-) where {T,S<:AbstractSampler{T}}
+) where {T,S<:QUBODrivers.AbstractSampler{T}}
     Test.@testset "▷ Spin ⋄ Max" begin
         # Build Model
         model = MOI.instantiate(sampler; with_bridge_type = T)
@@ -205,7 +205,7 @@ function _test_basic_spin_min_and_max(
     n::Integer,
     h::Vector{T},
     J::Matrix{T},
-) where {T,S<:AbstractSampler{T}}
+) where {T,S<:QUBODrivers.AbstractSampler{T}}
     Test.@testset "▷ Spin ⋄ Min and Max" begin
         # Build Model
         model = MOI.instantiate(sampler; with_bridge_type = T)
@@ -287,7 +287,7 @@ end
 function _test_basic_examples(
     config!::Function,
     sampler::Type{S},
-) where {T,S<:AbstractSampler{T}}
+) where {T,S<:QUBODrivers.AbstractSampler{T}}
     Test.@testset "⊚ Basic ⊚" verbose = true begin
         # Problem size
         n = 3
