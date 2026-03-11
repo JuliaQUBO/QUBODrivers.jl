@@ -3,9 +3,9 @@ Assert that the objective values for each fixed state in `returned` match those 
 the reference `oracle` dictionary.
 """
 function _assert_fixed_state_objectives(
-    returned::Dict{NTuple{3,T},T},
-    oracle::Dict{NTuple{3,T},T},
-) where {T}
+    returned::Dict{NTuple{N,T},T},
+    oracle::Dict{NTuple{N,T},T},
+) where {N,T}
     Test.@test length(returned) == length(oracle)
 
     for (state, objective) in oracle
