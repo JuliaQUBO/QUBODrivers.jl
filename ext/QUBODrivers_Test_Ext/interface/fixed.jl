@@ -177,9 +177,19 @@ function _test_moi_fixed_variable_constraint_types(
         config!(model)
         MOI.optimize!(model)
 
+        optimizer = MOI.get(model, MOI.RawSolver())
         result_count = MOI.get(model, MOI.ResultCount())
+        fixed_constraint_indices = MOI.get(
+            optimizer,
+            MOI.ListOfConstraintIndices{VI,MOI.EqualTo{Int}}(),
+        )
 
         Test.@test result_count > 0
+        Test.@test MOI.get(optimizer, MOI.NumberOfConstraints{VI,MOI.EqualTo{Int}}()) == 1
+        Test.@test length(fixed_constraint_indices) == 1
+        Test.@test MOI.is_valid(optimizer, only(fixed_constraint_indices))
+        Test.@test MOI.get(optimizer, MOI.ConstraintFunction(), only(fixed_constraint_indices)) == x[1]
+        Test.@test MOI.get(optimizer, MOI.ConstraintSet(), only(fixed_constraint_indices)) == MOI.EqualTo(1)
 
         for ri = 1:result_count
             Test.@test MOI.get(model, MOI.VariablePrimal(ri), x[1]) == one(T)

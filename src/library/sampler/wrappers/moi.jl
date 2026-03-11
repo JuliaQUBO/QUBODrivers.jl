@@ -139,8 +139,8 @@ end
 
 function _fixed_constraint_variable(
     sampler::AbstractSampler{T},
-    ci::MOI.ConstraintIndex{VI,MOI.EqualTo{T}},
-) where {T}
+    ci::MOI.ConstraintIndex{VI,MOI.EqualTo{S}},
+) where {T,S<:Real}
     fixed_constraint_variables = _fixed_constraint_variables(sampler)
     i = ci.value
     n = length(fixed_constraint_variables)
@@ -509,7 +509,10 @@ function MOI.get(sampler::AbstractSampler{T}, ::MOI.NumberOfVariables) where {T}
     return length(_get_moi_variables(sampler))
 end
 
-function MOI.get(sampler::AbstractSampler{T}, ::MOI.NumberOfConstraints{VI,MOI.EqualTo{T}}) where {T}
+function MOI.get(
+    sampler::AbstractSampler{T},
+    ::MOI.NumberOfConstraints{VI,MOI.EqualTo{S}},
+) where {T,S<:Real}
     return length(_fixed_constraint_variables(sampler))
 end
 
@@ -535,9 +538,12 @@ function MOI.get(sampler::AbstractSampler{T}, ::MOI.ListOfVariableIndices) where
     return copy(_get_moi_variables(sampler))
 end
 
-function MOI.get(sampler::AbstractSampler{T}, ::MOI.ListOfConstraintIndices{VI,MOI.EqualTo{T}}) where {T}
-    return MOI.ConstraintIndex{VI,MOI.EqualTo{T}}[
-        MOI.ConstraintIndex{VI,MOI.EqualTo{T}}(i) for
+function MOI.get(
+    sampler::AbstractSampler{T},
+    ::MOI.ListOfConstraintIndices{VI,MOI.EqualTo{S}},
+) where {T,S<:Real}
+    return MOI.ConstraintIndex{VI,MOI.EqualTo{S}}[
+        MOI.ConstraintIndex{VI,MOI.EqualTo{S}}(i) for
         i in 1:length(_fixed_constraint_variables(sampler))
     ]
 end
@@ -545,25 +551,25 @@ end
 function MOI.get(
     sampler::AbstractSampler{T},
     ::MOI.ConstraintFunction,
-    ci::MOI.ConstraintIndex{VI,MOI.EqualTo{T}},
-) where {T}
+    ci::MOI.ConstraintIndex{VI,MOI.EqualTo{S}},
+) where {T,S<:Real}
     return _fixed_constraint_variable(sampler, ci)
 end
 
 function MOI.get(
     sampler::AbstractSampler{T},
     ::MOI.ConstraintSet,
-    ci::MOI.ConstraintIndex{VI,MOI.EqualTo{T}},
-) where {T}
+    ci::MOI.ConstraintIndex{VI,MOI.EqualTo{S}},
+) where {T,S<:Real}
     vi = _fixed_constraint_variable(sampler, ci)
 
-    return MOI.EqualTo(_get_fixed_variables(sampler)[vi])
+    return MOI.EqualTo(convert(S, _get_fixed_variables(sampler)[vi]))
 end
 
 function MOI.is_valid(
     sampler::AbstractSampler{T},
-    ci::MOI.ConstraintIndex{VI,MOI.EqualTo{T}},
-) where {T}
+    ci::MOI.ConstraintIndex{VI,MOI.EqualTo{S}},
+) where {T,S<:Real}
     return 1 <= ci.value <= length(_fixed_constraint_variables(sampler))
 end
 
