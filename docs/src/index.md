@@ -53,7 +53,7 @@ end
   year      = {2023},
   publisher = {Zenodo},
   version   = {v0.1.0},
-  doi       = {10.5281/zenodo.6390515},
-  url       = {https://doi.org/10.5281/zenodo.6390515}
+  doi       = {10.5281/zenodo.13840948},
+  url       = {https://doi.org/10.5281/zenodo.13840948}
 }
 ``` -->
