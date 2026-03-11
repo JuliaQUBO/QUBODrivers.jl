@@ -13,6 +13,7 @@ const SQT{T} = MOI.ScalarQuadraticTerm{T}
 const Spin   = QUBODrivers.Spin
 
 # Interface Tests
+include("interface/fixed.jl")
 include("interface/moi.jl")
 include("interface/automatic.jl")
 

@@ -10,8 +10,9 @@ function _test_moi_interface(config!::Function, ::Type{S}) where {T,S<:QUBODrive
         end
 
         _test_moi_interface_instantiate(config!, S)
-
         _test_moi_interface_attributes(config!, S)
+        _test_moi_fixed_variable_contracts(config!, S)
+        _test_fixed_variable_reduction_helpers()
     end
 
     return nothing
