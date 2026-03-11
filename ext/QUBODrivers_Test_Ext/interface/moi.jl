@@ -15,6 +15,7 @@ function _test_moi_interface(config!::Function, ::Type{S}) where {T,S<:QUBODrive
         _test_moi_variable_domain_constraint_contracts(config!, S)
         _test_moi_fixed_variable_constraint_types(config!, S)
         _test_fixed_variable_reduction_helpers()
+        _test_dict_backed_sampler_storage_fallback()
     end
 
     return nothing

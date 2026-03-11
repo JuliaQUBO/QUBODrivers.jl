@@ -100,6 +100,96 @@ function _test_fixed_variable_reduction_helpers()
     return nothing
 end
 
+Base.@kwdef mutable struct _DictBackedSampler{T} <: QUBODrivers.AbstractSampler{T}
+    model::QUBOTools.Model{VI,T,Int} = QUBOTools.Model{VI,T,Int}()
+    attributes::Dict{Symbol,Any} = Dict{Symbol,Any}()
+end
+
+QUBOTools.backend(sampler::_DictBackedSampler) = sampler.model
+
+function QUBODrivers.set_model!(
+    sampler::_DictBackedSampler{T},
+    model::QUBOTools.Model{VI,T,Int},
+) where {T}
+    sampler.model = model
+
+    return model
+end
+
+MOI.get(::_DictBackedSampler, ::MOI.SolverName) = "Dict-Backed Test Sampler"
+MOI.get(::_DictBackedSampler, ::MOI.SolverVersion) = v"0.0.0"
+MOI.supports(::_DictBackedSampler, ::MOI.RawOptimizerAttribute) = true
+MOI.supports(::_DictBackedSampler, ::MOI.VariablePrimalStart) = true
+
+function MOI.get(sampler::_DictBackedSampler, ::MOI.VariablePrimalStart, vi::VI)
+    return QUBODrivers._get_variable_primal_start(sampler, vi)
+end
+
+function MOI.set(
+    sampler::_DictBackedSampler{T},
+    ::MOI.VariablePrimalStart,
+    vi::VI,
+    value,
+) where {T}
+    QUBODrivers._set_variable_primal_start!(sampler, vi, value)
+
+    return nothing
+end
+
+function MOI.set(
+    sampler::_DictBackedSampler,
+    attr::MOI.RawOptimizerAttribute,
+    value,
+)
+    sampler.attributes[Symbol(attr.name)] = value
+
+    return nothing
+end
+
+function MOI.get(
+    sampler::_DictBackedSampler,
+    attr::MOI.RawOptimizerAttribute,
+)
+    return get(sampler.attributes, Symbol(attr.name), nothing)
+end
+
+function _test_dict_backed_sampler_storage_fallback()
+    Test.@testset "Dict-Backed Storage Fallback" begin
+        T = Float64
+        sampler = _DictBackedSampler{T}()
+        model = MOI.Utilities.Model{T}()
+
+        x, _ = MOI.add_constrained_variables(model, fill(MOI.ZeroOne(), 2))
+
+        MOI.set(model, MOI.ObjectiveSense(), MOI.MIN_SENSE)
+        MOI.set(model, MOI.ObjectiveFunction{VI}(), x[1])
+        MOI.add_constraint(model, x[1], MOI.EqualTo(one(T)))
+
+        MOI.copy_to(sampler, model)
+
+        Test.@test MOI.get(sampler, MOI.NumberOfVariables()) == length(x)
+        Test.@test MOI.get(sampler, MOI.ListOfVariableIndices()) == x
+        Test.@test MOI.get(sampler, MOI.VariablePrimalStart(), x[1]) == one(T)
+        Test.@test (VI, MOI.ZeroOne) in MOI.get(sampler, MOI.ListOfConstraintTypesPresent())
+        Test.@test (VI, MOI.EqualTo{T}) in MOI.get(sampler, MOI.ListOfConstraintTypesPresent())
+
+        Test.@test MOI.set(sampler, MOI.RawOptimizerAttribute("fixed_variables"), :user_fixed) === nothing
+        Test.@test MOI.set(sampler, MOI.RawOptimizerAttribute("moi_variables"), :user_variables) === nothing
+        Test.@test MOI.get(sampler, MOI.RawOptimizerAttribute("fixed_variables")) == :user_fixed
+        Test.@test MOI.get(sampler, MOI.RawOptimizerAttribute("moi_variables")) == :user_variables
+        Test.@test MOI.get(sampler, MOI.NumberOfVariables()) == length(x)
+        Test.@test MOI.get(sampler, MOI.ListOfVariableIndices()) == x
+        Test.@test MOI.get(sampler, MOI.VariablePrimalStart(), x[1]) == one(T)
+
+        MOI.empty!(sampler)
+
+        Test.@test MOI.is_empty(sampler)
+        Test.@test isempty(MOI.get(sampler, MOI.ListOfVariableIndices()))
+    end
+
+    return nothing
+end
+
 function _test_moi_fixed_variable_contracts(
     config!::Function,
     sampler::Type{S},
@@ -127,11 +217,15 @@ function _test_moi_fixed_variable_contracts(
         Test.@test MOI.get(optimizer, MOI.NumberOfConstraints{VI,MOI.EqualTo{T}}()) == 1
 
         fixed_constraint_indices = MOI.get(optimizer, MOI.ListOfConstraintIndices{VI,MOI.EqualTo{T}}())
+        invalid_fixed_constraint = MOI.ConstraintIndex{VI,MOI.EqualTo{T}}(length(fixed_constraint_indices) + 1)
 
         Test.@test length(fixed_constraint_indices) == 1
         Test.@test MOI.is_valid(optimizer, only(fixed_constraint_indices))
+        Test.@test !MOI.is_valid(optimizer, invalid_fixed_constraint)
         Test.@test MOI.get(optimizer, MOI.ConstraintFunction(), only(fixed_constraint_indices)) == x[2]
         Test.@test MOI.get(optimizer, MOI.ConstraintSet(), only(fixed_constraint_indices)) == MOI.EqualTo(one(T))
+        Test.@test_throws Exception MOI.get(optimizer, MOI.ConstraintFunction(), invalid_fixed_constraint)
+        Test.@test_throws Exception MOI.get(optimizer, MOI.ConstraintSet(), invalid_fixed_constraint)
         Test.@test MOI.get(optimizer, MOI.VariablePrimalStart(), x[2]) == one(T)
         Test.@test MOI.set(optimizer, MOI.VariablePrimalStart(), x[2], one(T)) === nothing
         Test.@test MOI.set(optimizer, MOI.VariablePrimalStart(), x[2], nothing) === nothing
@@ -177,12 +271,20 @@ function _test_moi_variable_domain_constraint_contracts(
             bool_optimizer,
             MOI.ListOfConstraintIndices{VI,MOI.ZeroOne}(),
         )
+        invalid_zeroone_constraint = MOI.ConstraintIndex{VI,MOI.ZeroOne}(length(x) + 1)
 
         Test.@test MOI.get(bool_optimizer, MOI.NumberOfConstraints{VI,MOI.ZeroOne}()) == length(x)
+        Test.@test MOI.get(bool_optimizer, MOI.NumberOfConstraints{VI,Spin}()) == 0
         Test.@test length(zeroone_constraint_indices) == length(x)
         Test.@test MOI.is_valid(bool_optimizer, zeroone_constraint_indices[1])
+        Test.@test !MOI.is_valid(bool_optimizer, invalid_zeroone_constraint)
         Test.@test MOI.get(bool_optimizer, MOI.ConstraintFunction(), zeroone_constraint_indices[1]) == x[1]
         Test.@test MOI.get(bool_optimizer, MOI.ConstraintSet(), zeroone_constraint_indices[1]) == MOI.ZeroOne()
+        Test.@test_throws Exception MOI.get(
+            bool_optimizer,
+            MOI.ConstraintFunction(),
+            invalid_zeroone_constraint,
+        )
 
         spin_model = MOI.instantiate(sampler; with_bridge_type = T)
         s, _ = MOI.add_constrained_variables(spin_model, fill(Spin(), 2))
@@ -202,12 +304,20 @@ function _test_moi_variable_domain_constraint_contracts(
             spin_optimizer,
             MOI.ListOfConstraintIndices{VI,Spin}(),
         )
+        invalid_spin_constraint = MOI.ConstraintIndex{VI,Spin}(length(s) + 1)
 
+        Test.@test MOI.get(spin_optimizer, MOI.NumberOfConstraints{VI,MOI.ZeroOne}()) == 0
         Test.@test MOI.get(spin_optimizer, MOI.NumberOfConstraints{VI,Spin}()) == length(s)
         Test.@test length(spin_constraint_indices) == length(s)
         Test.@test MOI.is_valid(spin_optimizer, spin_constraint_indices[1])
+        Test.@test !MOI.is_valid(spin_optimizer, invalid_spin_constraint)
         Test.@test MOI.get(spin_optimizer, MOI.ConstraintFunction(), spin_constraint_indices[1]) == s[1]
         Test.@test MOI.get(spin_optimizer, MOI.ConstraintSet(), spin_constraint_indices[1]) == Spin()
+        Test.@test_throws Exception MOI.get(
+            spin_optimizer,
+            MOI.ConstraintFunction(),
+            invalid_spin_constraint,
+        )
     end
 
     return nothing

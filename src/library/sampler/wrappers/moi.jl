@@ -81,15 +81,23 @@ function MOI.copy_to(sampler::AbstractSampler{T}, src::MOI.ModelLike) where {T}
         _build_model_with_fixed_variables(T, src, variables, fixed_variables)
     QUBODrivers.set_model!(sampler, model)
 
-    # Collect warm-start values
-    for v in variables
-        if haskey(fixed_variables, v)
-            continue
+    # VariablePrimalStart is advisory; tolerate source models that reject it.
+    if MOI.supports(src, MOI.VariablePrimalStart(), VI)
+        try
+            for v in variables
+                if haskey(fixed_variables, v)
+                    continue
+                end
+
+                x = MOI.get(src, MOI.VariablePrimalStart(), v)
+
+                MOI.set(sampler, MOI.VariablePrimalStart(), v, x)
+            end
+        catch err
+            if !(err isa MOI.GetAttributeNotAllowed{MOI.VariablePrimalStart})
+                rethrow()
+            end
         end
-
-        x = MOI.get(src, MOI.VariablePrimalStart(), v)
-
-        MOI.set(sampler, MOI.VariablePrimalStart(), v, x)
     end
 
     return MOIU.identity_index_map(src)

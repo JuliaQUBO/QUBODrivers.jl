@@ -3,6 +3,7 @@ module QUBODrivers_Test_Ext
 import Test
 import QUBODrivers
 import MathOptInterface as MOI
+import QUBOTools
 using QUBOTools: ↑, ↓
 
 const VI     = MOI.VariableIndex
