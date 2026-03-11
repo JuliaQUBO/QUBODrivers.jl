@@ -10,7 +10,7 @@
         <img src="https://img.shields.io/badge/arXiv-2307.02577-b31b1b.svg" alt="arXiv"/>
     </a>
     <a href="https://codecov.io/gh/JuliaQUBO/QUBODrivers.jl">
-        <img src="https://codecov.io/gh/JuliaQUBO/QUBODrivers.jl/branch/main/graph/badge.svg?token=729WFU0752"/>
+        <img src="https://codecov.io/gh/JuliaQUBO/QUBODrivers.jl/graph/badge.svg?branch=main" alt="Coverage" />
     </a>
     <a href="https://github.com/JuliaQUBO/QUBODrivers.jl/actions/workflows/ci.yml">
         <img src="https://github.com/JuliaQUBO/QUBODrivers.jl/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI" />
@@ -21,8 +21,8 @@
     <a href="https://JuliaQUBO.github.io/QUBODrivers.jl/dev">
         <img src="https://img.shields.io/badge/docs-dev-blue.svg" alt="Docs">
     </a>
-    <a href="https://zenodo.org/badge/latestdoi/623618138">
-        <img src="https://zenodo.org/badge/623618138.svg" alt="DOI">
+    <a href="https://doi.org/10.5281/zenodo.6390515">
+        <img src="https://zenodo.org/badge/DOI/10.5281/zenodo.6390515.svg" alt="DOI">
     </a>
 </div>
 
