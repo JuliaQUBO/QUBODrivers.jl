@@ -518,7 +518,7 @@ end
 
 function MOI.get(sampler::AbstractSampler{T}, ::MOI.ListOfConstraintTypesPresent) where {T}
     if iszero(MOI.get(sampler, MOI.NumberOfVariables()))
-        return []
+        return Tuple{Type,Type}[]
     end
 
     constraint_types = Tuple{Type,Type}[]

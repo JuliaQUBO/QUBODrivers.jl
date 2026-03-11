@@ -149,7 +149,10 @@ function _test_moi_fixed_variable_contracts(
         Test.@test MOI.is_empty(optimizer)
         Test.@test MOI.get(optimizer, MOI.NumberOfVariables()) == 0
         Test.@test isempty(MOI.get(optimizer, MOI.ListOfVariableIndices()))
-        Test.@test isempty(MOI.get(optimizer, MOI.ListOfConstraintTypesPresent()))
+        constraint_types = MOI.get(optimizer, MOI.ListOfConstraintTypesPresent())
+
+        Test.@test constraint_types isa Vector{Tuple{Type,Type}}
+        Test.@test isempty(constraint_types)
     end
 
     return nothing
