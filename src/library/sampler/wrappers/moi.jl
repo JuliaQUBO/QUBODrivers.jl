@@ -166,6 +166,17 @@ function _fixed_constraint_variable(
     return fixed_constraint_variables[i]
 end
 
+function _domain_constraint_variable(sampler::AbstractSampler, i::Integer)
+    variables = _get_moi_variables(sampler)
+    n = length(variables)
+
+    if !(1 <= i <= n)
+        error("Invalid constraint index '$i'; There are $(n) constraints")
+    end
+
+    return variables[i]
+end
+
 function _get_variable_primal_start(sampler::AbstractSampler{T}, vi::VI) where {T}
     fixed_variables = _get_fixed_variables(sampler)
 
@@ -533,6 +544,14 @@ function MOI.get(
     return length(_fixed_constraint_variables(sampler, S))
 end
 
+function MOI.get(sampler::AbstractSampler{T}, ::MOI.NumberOfConstraints{VI,MOI.ZeroOne}) where {T}
+    return QUBOTools.domain(sampler) === QUBOTools.BoolDomain ? length(_get_moi_variables(sampler)) : 0
+end
+
+function MOI.get(sampler::AbstractSampler{T}, ::MOI.NumberOfConstraints{VI,Spin}) where {T}
+    return QUBOTools.domain(sampler) === QUBOTools.SpinDomain ? length(_get_moi_variables(sampler)) : 0
+end
+
 function MOI.get(sampler::AbstractSampler{T}, ::MOI.ListOfConstraintTypesPresent) where {T}
     if iszero(MOI.get(sampler, MOI.NumberOfVariables()))
         return Tuple{Type,Type}[]
@@ -569,12 +588,54 @@ end
 
 function MOI.get(
     sampler::AbstractSampler{T},
+    ::MOI.ListOfConstraintIndices{VI,MOI.ZeroOne},
+) where {T}
+    if QUBOTools.domain(sampler) !== QUBOTools.BoolDomain
+        return MOI.ConstraintIndex{VI,MOI.ZeroOne}[]
+    end
+
+    return MOI.ConstraintIndex{VI,MOI.ZeroOne}[
+        MOI.ConstraintIndex{VI,MOI.ZeroOne}(i) for i in 1:length(_get_moi_variables(sampler))
+    ]
+end
+
+function MOI.get(
+    sampler::AbstractSampler{T},
+    ::MOI.ListOfConstraintIndices{VI,Spin},
+) where {T}
+    if QUBOTools.domain(sampler) !== QUBOTools.SpinDomain
+        return MOI.ConstraintIndex{VI,Spin}[]
+    end
+
+    return MOI.ConstraintIndex{VI,Spin}[
+        MOI.ConstraintIndex{VI,Spin}(i) for i in 1:length(_get_moi_variables(sampler))
+    ]
+end
+
+function MOI.get(
+    sampler::AbstractSampler{T},
     ::MOI.ListOfConstraintIndices{VI,MOI.EqualTo{S}},
 ) where {T,S<:Real}
     return MOI.ConstraintIndex{VI,MOI.EqualTo{S}}[
         MOI.ConstraintIndex{VI,MOI.EqualTo{S}}(i) for
         i in 1:length(_fixed_constraint_variables(sampler, S))
     ]
+end
+
+function MOI.get(
+    sampler::AbstractSampler{T},
+    ::MOI.ConstraintFunction,
+    ci::MOI.ConstraintIndex{VI,MOI.ZeroOne},
+) where {T}
+    return _domain_constraint_variable(sampler, ci.value)
+end
+
+function MOI.get(
+    sampler::AbstractSampler{T},
+    ::MOI.ConstraintFunction,
+    ci::MOI.ConstraintIndex{VI,Spin},
+) where {T}
+    return _domain_constraint_variable(sampler, ci.value)
 end
 
 function MOI.get(
@@ -588,11 +649,43 @@ end
 function MOI.get(
     sampler::AbstractSampler{T},
     ::MOI.ConstraintSet,
+    ::MOI.ConstraintIndex{VI,MOI.ZeroOne},
+) where {T}
+    return MOI.ZeroOne()
+end
+
+function MOI.get(
+    sampler::AbstractSampler{T},
+    ::MOI.ConstraintSet,
+    ::MOI.ConstraintIndex{VI,Spin},
+) where {T}
+    return Spin()
+end
+
+function MOI.get(
+    sampler::AbstractSampler{T},
+    ::MOI.ConstraintSet,
     ci::MOI.ConstraintIndex{VI,MOI.EqualTo{S}},
 ) where {T,S<:Real}
     vi = _fixed_constraint_variable(sampler, ci)
 
     return MOI.EqualTo(convert(S, _get_fixed_variables(sampler)[vi].value))
+end
+
+function MOI.is_valid(
+    sampler::AbstractSampler{T},
+    ci::MOI.ConstraintIndex{VI,MOI.ZeroOne},
+) where {T}
+    return QUBOTools.domain(sampler) === QUBOTools.BoolDomain &&
+           1 <= ci.value <= length(_get_moi_variables(sampler))
+end
+
+function MOI.is_valid(
+    sampler::AbstractSampler{T},
+    ci::MOI.ConstraintIndex{VI,Spin},
+) where {T}
+    return QUBOTools.domain(sampler) === QUBOTools.SpinDomain &&
+           1 <= ci.value <= length(_get_moi_variables(sampler))
 end
 
 function MOI.is_valid(

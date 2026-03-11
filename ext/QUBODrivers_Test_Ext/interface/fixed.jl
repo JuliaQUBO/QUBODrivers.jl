@@ -158,6 +158,61 @@ function _test_moi_fixed_variable_contracts(
     return nothing
 end
 
+function _test_moi_variable_domain_constraint_contracts(
+    config!::Function,
+    sampler::Type{S},
+) where {T,S<:QUBODrivers.AbstractSampler{T}}
+    Test.@testset "Variable Domain Constraint Contracts" begin
+        bool_model = MOI.instantiate(sampler; with_bridge_type = T)
+        x, _ = MOI.add_constrained_variables(bool_model, fill(MOI.ZeroOne(), 2))
+
+        MOI.set(bool_model, MOI.ObjectiveSense(), MOI.MIN_SENSE)
+        MOI.set(bool_model, MOI.ObjectiveFunction{VI}(), x[1])
+
+        config!(bool_model)
+        MOI.optimize!(bool_model)
+
+        bool_optimizer = MOI.get(bool_model, MOI.RawSolver())
+        zeroone_constraint_indices = MOI.get(
+            bool_optimizer,
+            MOI.ListOfConstraintIndices{VI,MOI.ZeroOne}(),
+        )
+
+        Test.@test MOI.get(bool_optimizer, MOI.NumberOfConstraints{VI,MOI.ZeroOne}()) == length(x)
+        Test.@test length(zeroone_constraint_indices) == length(x)
+        Test.@test MOI.is_valid(bool_optimizer, zeroone_constraint_indices[1])
+        Test.@test MOI.get(bool_optimizer, MOI.ConstraintFunction(), zeroone_constraint_indices[1]) == x[1]
+        Test.@test MOI.get(bool_optimizer, MOI.ConstraintSet(), zeroone_constraint_indices[1]) == MOI.ZeroOne()
+
+        spin_model = MOI.instantiate(sampler; with_bridge_type = T)
+        s, _ = MOI.add_constrained_variables(spin_model, fill(Spin(), 2))
+
+        MOI.set(spin_model, MOI.ObjectiveSense(), MOI.MIN_SENSE)
+        MOI.set(
+            spin_model,
+            MOI.ObjectiveFunction{SQF{T}}(),
+            SQF{T}(SQT{T}[], SAT{T}[SAT{T}(one(T), si) for si in s], zero(T)),
+        )
+
+        config!(spin_model)
+        MOI.optimize!(spin_model)
+
+        spin_optimizer = MOI.get(spin_model, MOI.RawSolver())
+        spin_constraint_indices = MOI.get(
+            spin_optimizer,
+            MOI.ListOfConstraintIndices{VI,Spin}(),
+        )
+
+        Test.@test MOI.get(spin_optimizer, MOI.NumberOfConstraints{VI,Spin}()) == length(s)
+        Test.@test length(spin_constraint_indices) == length(s)
+        Test.@test MOI.is_valid(spin_optimizer, spin_constraint_indices[1])
+        Test.@test MOI.get(spin_optimizer, MOI.ConstraintFunction(), spin_constraint_indices[1]) == s[1]
+        Test.@test MOI.get(spin_optimizer, MOI.ConstraintSet(), spin_constraint_indices[1]) == Spin()
+    end
+
+    return nothing
+end
+
 function _test_moi_fixed_variable_constraint_types(
     config!::Function,
     sampler::Type{S},
