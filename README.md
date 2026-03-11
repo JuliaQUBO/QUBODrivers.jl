@@ -21,8 +21,8 @@
     <a href="https://JuliaQUBO.github.io/QUBODrivers.jl/dev">
         <img src="https://img.shields.io/badge/docs-dev-blue.svg" alt="Docs">
     </a>
-    <a href="https://zenodo.org/badge/latestdoi/623618138">
-        <img src="https://zenodo.org/badge/623618138.svg" alt="DOI">
+    <a href="https://doi.org/10.5281/zenodo.13840948">
+        <img src="https://zenodo.org/badge/DOI/10.5281/zenodo.13840948.svg" alt="DOI">
     </a>
 </div>
 
