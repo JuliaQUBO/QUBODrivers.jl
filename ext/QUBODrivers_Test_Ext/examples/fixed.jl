@@ -1,4 +1,6 @@
 raw"""
+Assert that the objective values for each fixed state in `returned` match those in
+the reference `oracle` dictionary.
 """
 function _assert_fixed_state_objectives(
     returned::Dict{NTuple{3,T},T},
