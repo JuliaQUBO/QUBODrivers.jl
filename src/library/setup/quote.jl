@@ -5,9 +5,16 @@ function __setup_quote(spec::_SamplerSpec)
         Base.@__doc__ mutable struct $(Optimizer){T} <: QUBODrivers.AbstractSampler{T}
             model::QUBOTools.Model{VI,T,Int}
             attributes::Dict{Symbol,Any}
+            moi_variables::Vector{VI}
+            fixed_variables::Dict{VI,T}
 
             function $(Optimizer){T}() where {T}
-                return new{T}(QUBOTools.Model{VI,T,Int}(), Dict{Symbol,Any}())
+                return new{T}(
+                    QUBOTools.Model{VI,T,Int}(),
+                    Dict{Symbol,Any}(),
+                    VI[],
+                    Dict{VI,T}(),
+                )
             end
         end
 
