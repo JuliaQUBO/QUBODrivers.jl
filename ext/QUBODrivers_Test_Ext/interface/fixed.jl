@@ -132,3 +132,37 @@ function _test_moi_fixed_variable_contracts(
 
     return nothing
 end
+
+function _test_moi_fixed_variable_constraint_types(
+    config!::Function,
+    sampler::Type{S},
+) where {T,S<:QUBODrivers.AbstractSampler{T}}
+    Test.@testset "Fixed Variable Constraint Types" begin
+        optimizer = sampler()
+
+        Test.@test MOI.supports_constraint(optimizer, VI, MOI.EqualTo{Int})
+
+        model = MOI.instantiate(sampler; with_bridge_type = T)
+
+        Q    = T[2 -3; 0 4]
+        x, _ = MOI.add_constrained_variables(model, fill(MOI.ZeroOne(), 2))
+
+        MOI.set(model, MOI.ObjectiveSense(), MOI.MIN_SENSE)
+        MOI.set(model, MOI.ObjectiveFunction{SQF{T}}(), x' * Q * x)
+
+        MOI.add_constraint(model, x[1], MOI.EqualTo(1))
+
+        config!(model)
+        MOI.optimize!(model)
+
+        result_count = MOI.get(model, MOI.ResultCount())
+
+        Test.@test result_count > 0
+
+        for ri = 1:result_count
+            Test.@test MOI.get(model, MOI.VariablePrimal(ri), x[1]) == one(T)
+        end
+    end
+
+    return nothing
+end
