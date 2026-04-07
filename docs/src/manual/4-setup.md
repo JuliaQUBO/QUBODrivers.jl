@@ -1,12 +1,12 @@
 # Sampler Setup
 
-This guide aims to provide a tutorial on how to implement new sampler interfaces using [QUBODrivers.jl](https://github.com/psrenergy/QUBODrivers.jl).
-To get your QUBO sampler running right now, [QUBODrivers.jl](https://github.com/psrenergy/QUBODrivers.jl) will require only two main ingredients: a [`QUBODrivers.@setup`](@ref) macro call and a [`QUBODrivers.sample`](@ref) method implementation.
+This guide aims to provide a tutorial on how to implement new sampler interfaces using [QUBODrivers.jl](https://github.com/JuliaQUBO/QUBODrivers.jl).
+To get your QUBO sampler running right now, [QUBODrivers.jl](https://github.com/JuliaQUBO/QUBODrivers.jl) will require only two main ingredients: a [`QUBODrivers.@setup`](@ref) macro call and a [`QUBODrivers.sample`](@ref) method implementation.
 
 ## Imports
 
-First things first, we are going to import both [QUBODrivers.jl](https://github.com/psrenergy/QUBODrivers.jl) and also [MathOptInterface.jl](https://github.com/jump-dev/MathOptInterface.jl), commonly aliased as `MOI`.
-Although not strictly necessary, we recommend that you also import [QUBOTools.jl](https://github.com/psrenergy/QUBOTools.jl)for convenience, as it provides many useful functions for QUBO manipulation.
+First things first, we are going to import both [QUBODrivers.jl](https://github.com/JuliaQUBO/QUBODrivers.jl) and also [MathOptInterface.jl](https://github.com/jump-dev/MathOptInterface.jl), commonly aliased as `MOI`.
+Although not strictly necessary, we recommend that you also import [QUBOTools.jl](https://github.com/JuliaQUBO/QUBOTools.jl) for convenience, as it provides many useful functions for QUBO manipulation.
 It is readly available in the `QUBODrivers` module.
 
 ```julia
@@ -64,7 +64,27 @@ end
 QUBODrivers.sample
 ```
 
-### The [`QUBODrivers.SampleSet`] collection
+### The [`SampleSet`](@ref) collection
+
+The [`QUBODrivers.sample`](@ref) method must return a `QUBOTools.SampleSet{T}`.
+A `SampleSet` collects `QUBOTools.Sample` entries together with metadata about the sampling run.
+
+Build a `SampleSet` from a vector of samples and an optional metadata dictionary:
+
+```julia
+samples = QUBOTools.Sample{T,Int}[
+    QUBOTools.Sample{T,Int}(ψ, λ)   # state vector ψ, objective value λ
+    for (ψ, λ) in zip(states, values)
+]
+
+metadata = Dict{String,Any}(
+    "time" => Dict{String,Any}("total" => elapsed),
+)
+
+return QUBOTools.SampleSet(samples, metadata; sense = :min, domain = :bool)
+```
+
+The `sense` keyword (`:min` or `:max`) and `domain` (`:bool` or `:spin`) tell QUBOTools how to interpret the samples.
 
 ## A complete example
 

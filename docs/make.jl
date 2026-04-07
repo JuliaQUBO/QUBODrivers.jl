@@ -27,7 +27,7 @@ makedocs(;
             "Benchmarking"  => "manual/6-benchmarks.md",
         ],
         "Booklet" => [
-            "Itroduction"       => "booklet/1-intro.md",
+            "Introduction"      => "booklet/1-intro.md",
             "Sampler Interface" => "booklet/2-interface.md",
             "Attribute System"  => "booklet/3-attributes.md",
         ],

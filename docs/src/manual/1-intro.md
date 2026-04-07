@@ -14,8 +14,8 @@ An optimization problem is in its QUBO form if it is written as
 with linear terms ``\mathbf{\ell} \in \mathbb{R}^{n}`` and quadratic ``\mathbf{Q} \in \mathbb{R}^{n \times n}``. ``\alpha, \beta \in \mathbb{R}`` are, respectively, the scaling and offset factors.
 
 The MOI-JuMP optimizers defined using the `QUBODrivers.AbstractSampler{T} <: MOI.AbstractOptimizer` interface only support models given in the QUBO form.
-`QUBODrivers.jl` employs [QUBOTools](https://github.com/psrenergy/QUBOTools.jl) on many tasks involving data management and querying.
-It is worth taking a look at [QUBOTool's docs](https://psrenergy.github.io/QUBOTools.jl).
+`QUBODrivers.jl` employs [QUBOTools](https://github.com/JuliaQUBO/QUBOTools.jl) on many tasks involving data management and querying.
+It is worth taking a look at [QUBOTool's docs](https://JuliaQUBO.github.io/QUBOTools.jl).
 
 ## Table of Contents
 

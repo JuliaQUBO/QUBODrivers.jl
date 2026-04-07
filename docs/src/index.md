@@ -9,7 +9,7 @@ It also contains a few utility samplers and testing tools for performance compar
 
 ### Installation
 
-[QUBODrivers.jl](https://github.com/psrenergy/QUBODrivers.jl) is registered in Julia's General Registry and is available for download using the standard package manager.
+[QUBODrivers.jl](https://github.com/JuliaQUBO/QUBODrivers.jl) is registered in Julia's General Registry and is available for download using the standard package manager.
 
 ```julia-repl
 julia> import Pkg
@@ -47,12 +47,12 @@ end
 <!-- ## Citing QUBODrivers.jl
 ```tex
 @software{QUBODrivers.jl:2023,
-  author    = {Pedro Xavier and Pedro Ripper and Tiago Andrade and Joaquim Garcia and David Bernal},
+  author    = {Pedro Xavier and Pedro Ripper and Tiago Andrade and Joaquim Garcia and David Bernal Neira},
   title     = {QUBODrivers.jl},
   month     = {apr},
   year      = {2023},
   publisher = {Zenodo},
-  version   = {v0.1.0},
+  version   = {v0.3.4},
   doi       = {10.5281/zenodo.13840948},
   url       = {https://doi.org/10.5281/zenodo.13840948}
 }
