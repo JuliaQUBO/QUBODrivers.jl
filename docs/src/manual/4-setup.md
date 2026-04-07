@@ -64,7 +64,7 @@ end
 QUBODrivers.sample
 ```
 
-### The [`SampleSet`](@ref) collection
+### The `SampleSet` collection
 
 The [`QUBODrivers.sample`](@ref) method must return a `QUBOTools.SampleSet{T}`.
 A `SampleSet` collects `QUBOTools.Sample` entries together with metadata about the sampling run.
