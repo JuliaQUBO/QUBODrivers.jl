@@ -100,9 +100,9 @@ If your project is using [QUBODrivers.jl](https://github.com/JuliaQUBO/QUBODrive
 <div align="center">
     <a href="https://github.com/JuliaQUBO/QUBO.jl">
     <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/JuliaQUBO/QUBO.jl/refs/heads/master/docs/src/assets/logo-collaboration-dark.png">
-      <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/JuliaQUBO/QUBO.jl/refs/heads/master/docs/src/assets/logo-collaboration-light.png">
-      <img alt="QUBO.jl Collaboration" src="">
+      <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/JuliaQUBO/QUBO.jl/refs/heads/main/docs/src/assets/logo-collaboration-dark.png">
+      <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/JuliaQUBO/QUBO.jl/refs/heads/main/docs/src/assets/logo-collaboration-light.png">
+      <img alt="QUBO.jl Collaboration" src="https://raw.githubusercontent.com/JuliaQUBO/QUBO.jl/refs/heads/main/docs/src/assets/logo-collaboration-light.png">
     </picture> 
     </a>
 </div>
