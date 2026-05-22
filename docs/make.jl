@@ -23,6 +23,7 @@ makedocs(;
             "Solving QUBO"  => "manual/2-solve.md",
             "Samplers"      => "manual/3-samplers.md",
             "Sampler Setup" => "manual/4-setup.md",
+            "Implementing a Sampler" => "manual/7-integration.md",
             "Test Suite"    => "manual/5-tests.md",
             "Benchmarking"  => "manual/6-benchmarks.md",
         ],

@@ -20,6 +20,6 @@ It is worth taking a look at [QUBOTool's docs](https://JuliaQUBO.github.io/QUBOT
 ## Table of Contents
 
 ```@contents
-Pages = ["2-solve.md", "3-samplers.md", "4-setup.md", "5-tests.md", "6-benchmarks.md"]
+Pages = ["2-solve.md", "3-samplers.md", "4-setup.md", "7-integration.md", "5-tests.md", "6-benchmarks.md"]
 Depth = 2
 ```
