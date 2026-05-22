@@ -2,8 +2,22 @@
 
 ## Introduction
 
-This package aims to provide a common [MOI](https://github.com/jump-dev/MathOptInterface.jl)-compliant API for [QUBO](https://en.wikipedia.org/wiki/Quadratic_unconstrained_binary_optimization) Sampling & Annealing machines.
-It also contains a few utility samplers and testing tools for performance comparison, sanity checks and basic analysis features.
+QUBODrivers.jl provides a common
+[MathOptInterface](https://github.com/jump-dev/MathOptInterface.jl)-compatible
+API for [QUBO](https://en.wikipedia.org/wiki/Quadratic_unconstrained_binary_optimization)
+samplers and annealing backends.
+
+The package includes:
+
+- utility samplers for exact enumeration, random sampling, and warm-start
+  identity sampling;
+- a macro for declaring sampler optimizers and user-facing attributes;
+- MOI and QUBOTools plumbing for model conversion and result access;
+- a reusable test suite for sampler implementations.
+
+If you want to solve a model, start with [Solving QUBO](@ref). If you want to
+implement a new sampler wrapper, start with [Sampler Setup](@ref) and
+[Implementing a Sampler](@ref).
 
 ## Quick Start
 

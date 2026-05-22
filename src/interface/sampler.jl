@@ -1,10 +1,32 @@
 @doc raw"""
     AbstractSampler{T} <: MOI.AbstractOptimizer
+
+Abstract supertype for QUBODrivers sampler optimizers.
+
+Concrete sampler optimizers are usually generated with [`QUBODrivers.@setup`](@ref).
+They are MathOptInterface optimizers that accept QUBO or Ising models with
+binary or spin variables and return one or more sampled states through standard
+MOI result attributes.
+
+The type parameter `T` is the numeric coefficient type used by the internal
+`QUBOTools.Model`.
 """
 abstract type AbstractSampler{T} <: MOI.AbstractOptimizer end
 
 @doc raw"""
     sample(::AbstractSampler{T})::SampleSet{T} where {T}
+
+Run the backend sampler and return a `QUBOTools.SampleSet`.
+
+Sampler packages implement this method for their optimizer type. The method
+should read the model from the sampler, read any MOI or raw optimizer
+attributes it needs, call the backend, and return a `SampleSet{T}` whose
+samples use the same sense and domain as the backend output.
+
+`MOI.optimize!` calls this method and attaches the returned sample set to the
+optimizer. If the returned metadata does not include a `"time"` dictionary with
+a `"total"` entry, or does not include `"status"`, QUBODrivers fills those
+fields with default values.
 """
 function sample end
 
@@ -13,7 +35,14 @@ function sample(::S) where {S<:AbstractSampler}
 end
 
 @doc raw"""
-    set_model!
+    set_model!(sampler::AbstractSampler{T}, model::QUBOTools.Model{VI,T,Int}) where {T}
+
+Store the QUBOTools model backing a sampler.
+
+The [`@setup`](@ref) macro provides this method for generated optimizer types.
+Custom sampler types that do not use `@setup` must provide it so that
+`MOI.copy_to` can transfer JuMP/MOI models into the sampler before
+optimization.
 """
 function set_model! end
 

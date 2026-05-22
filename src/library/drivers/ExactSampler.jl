@@ -8,10 +8,11 @@ import QUBODrivers: MOI, Sample, SampleSet
     ExactSampler.Optimizer{T}
 
 This sampler performs an exhaustive search over all ``2^{n}`` possible states.
+It is useful as a correctness oracle for small QUBO and Ising models.
 
 !!! warn
-    Due to the exponetially large amount of visited states, it is not possible
-    to use this sampler for problems any larger than ``20`` variables big.
+    Due to the exponentially large number of visited states, this sampler is
+    intended only for small instances.
 """
 QUBODrivers.@setup Optimizer begin
     name    = "Exact Sampler"

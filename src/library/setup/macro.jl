@@ -1,22 +1,35 @@
 @doc raw"""
-    @setup(expr)
+    QUBODrivers.@setup Optimizer begin
+        name = "Solver Name"
+        version = v"1.0.0"
+        attributes = begin
+            NumberOfReads["num_reads"]::Integer = 1_000
+        end
+    end
 
-The `@setup` macro receives a `begin ... end` block with an attribute definition on each of the block's statements.
+Declare a QUBODrivers sampler optimizer type.
 
-## Sampler Attributes
+The macro creates a mutable `Optimizer{T} <: QUBODrivers.AbstractSampler{T}`,
+QUBOTools model storage, MOI optimizer metadata, raw attribute storage, and
+`MOI.get`/`MOI.set`/`MOI.supports` methods for declared attributes.
 
-All attributes must be presented as an assignment to the default value of that attribute.
-To create a MathOptInterface optimizer attribute, an identifier must be present on the left hand side.
-If a solver-specific, raw attribute is desired, its name must be given as a string, e.g. between double quotes.
-In the special case where an attribute could be accessed in both ways, the identifier must be followed by the parenthesised raw attribute string. In any case, the attribute type can be specified typing the type assertion operator `::` followed by the type itself just before the equal sign.
+The setup block accepts:
 
-For example, a list of the valid syntax variations for the *number of reads* attribute follows:
-    - `"num_reads" = 1_000`
-    - `"num_reads"::Integer = 1_000`
-    - `NumberOfReads = 1_000`
-    - `NumberOfReads::Integer = 1_000`
-    - `NumberOfReads("num_reads") = 1_000`
-    - `NumberOfReads("num_reads")::Integer = 1_000`
+- `name`: required solver name returned by `MOI.SolverName`;
+- `version`: optional `VersionNumber`, defaulting to the QUBODrivers package
+  version;
+- `attributes`: optional block of solver attributes.
+
+Attributes are assignments to default values. They may be typed with `::T`,
+exposed as typed MOI attributes, exposed as raw string attributes, or exposed as
+both:
+
+- `"num_reads" = 1_000`
+- `"num_reads"::Integer = 1_000`
+- `NumberOfReads = 1_000`
+- `NumberOfReads::Integer = 1_000`
+- `NumberOfReads["num_reads"] = 1_000`
+- `NumberOfReads["num_reads"]::Integer = 1_000`
 
 ### Example
 
@@ -32,6 +45,7 @@ QUBODrivers.@setup Optimizer begin
 end
 ```
 
+After setup, implement [`QUBODrivers.sample`](@ref) for the generated optimizer.
 """
 macro setup(raw_args...)
     # Parse parameters
