@@ -3,7 +3,7 @@
 Benchmarking QUBO samplers is partly about runtime and partly about solution
 quality. QUBODrivers exposes both through standard JuMP/MOI result queries, so a
 simple benchmark can collect elapsed time, number of returned states, objective
-values, objective-value frequencies, and the best state found.
+values, read counts, objective-value frequencies, and the best state found.
 
 ## Benchmark a JuMP Model
 
@@ -79,10 +79,11 @@ end
 
 `QUBODrivers.benchmark` copies a user-provided MOI model into the sampler and
 returns a named tuple with solver metadata, objective values, result count, best
-state, best objective value, objective summary, MOI solve time, wall-clock time
-around `MOI.optimize!`, and status fields. `result.objective_summary` contains
-`minimum`, `maximum`, `mean`, and a `histogram` mapping each observed objective
-value to its frequency. The optional `do` block receives the raw sampler
+state, best objective value, read counts, objective summary, MOI solve time,
+wall-clock time around `MOI.optimize!`, and status fields.
+`result.objective_summary` contains `minimum`, `maximum`, a read-weighted
+`mean`, `total_reads`, and a `histogram` mapping each observed objective value
+to its total read count. The optional `do` block receives the raw sampler
 optimizer after model copy and before optimization. If no model is provided,
 `QUBODrivers.benchmark` falls back to a small built-in QUBO instance as a smoke
 benchmark.
