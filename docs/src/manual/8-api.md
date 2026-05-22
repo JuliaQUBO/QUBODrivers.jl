@@ -38,10 +38,11 @@ QUBODrivers.RandomSampler.Optimizer
 QUBODrivers.IdentitySampler.Optimizer
 ```
 
-## Test Extension
+## Test and Benchmark Helpers
 
 ```@docs; canonical=false
 QUBODrivers.test
+QUBODrivers.benchmark
 ```
 
 ## Re-Exported Types
