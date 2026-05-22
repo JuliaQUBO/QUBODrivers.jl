@@ -1,14 +1,17 @@
 # Benchmarking
 
-Benchmarking QUBO samplers is an important step for evaluating solver performance.
-This section provides guidelines along with a practical example for comparing samplers using QUBODrivers.jl.
+Benchmarking QUBO samplers is partly about runtime and partly about solution
+quality. QUBODrivers exposes both through standard JuMP/MOI result queries, so a
+simple benchmark can collect elapsed time, number of returned states, objective
+values, and the best state found.
 
 ## Comparing Samplers
 
-The built-in utility samplers (`ExactSampler`, `RandomSampler`) serve as useful baselines.
-Since samplers return multiple results through MOI, you can collect objective values, solution vectors, and timing to compare across methods.
+The built-in utility samplers are useful baselines. `ExactSampler` gives a
+complete reference on small instances, while `RandomSampler` provides a cheap
+stochastic baseline.
 
-```julia
+```@example benchmarking
 using JuMP
 using QUBODrivers
 
@@ -18,41 +21,71 @@ Q = [
      2.0  2.0 -1.0
 ]
 
-function benchmark_sampler(OptimizerType; kwargs...)
-    model = Model(() -> OptimizerType(; kwargs...))
+function benchmark_sampler(OptimizerType; attributes = Pair{String,Any}[])
+    model = Model(OptimizerType)
+
+    for (name, value) in attributes
+        set_optimizer_attribute(model, name, value)
+    end
 
     @variable(model, x[1:3], Bin)
     @objective(model, Min, x' * Q * x)
 
-    stats = @timed optimize!(model)
+    solve = @timed optimize!(model)
 
     results = [
         (value.(x; result=i), objective_value(model; result=i))
         for i in 1:result_count(model)
     ]
 
-    best = minimum(r -> r[2], results)
-
-    return (; time = stats.time, best, n_results = length(results))
+    return (;
+        time = solve.time,
+        best = minimum(last, results),
+        n_results = length(results),
+    )
 end
 ```
 
-```julia
-# Exact enumeration (reference)
+```@example benchmarking
 exact = benchmark_sampler(ExactSampler.Optimizer)
 
-# Random sampling
-random = benchmark_sampler(RandomSampler.Optimizer)
+random = benchmark_sampler(
+    RandomSampler.Optimizer;
+    attributes = ["num_reads" => 100, "seed" => 1],
+)
+
+(exact.best, random.best)
 ```
 
 ## Timing Information
 
-Samplers store timing metadata in the sample set.
-After solving, `MOI.get(model, MOI.SolveTimeSec())` returns the total solve time in seconds, which is useful for automated benchmarking scripts.
+Samplers store timing metadata in the returned sample set. After solving,
+`MOI.get(backend(model), MOI.SolveTimeSec())` returns the effective solve time
+reported through MOI. This can differ from wall-clock timing around
+`optimize!`, especially for wrappers that separate model conversion, backend
+submission, queue time, and sample decoding.
+
+## What to Report
+
+For stochastic or hardware-backed samplers, report enough context for the result
+to be reproducible:
+
+- package and backend versions;
+- problem size and density;
+- objective sense and variable domain;
+- sampler attributes, especially seeds, number of reads, time limits, and
+  threads;
+- best objective value, distribution of objective values, and success rate if a
+  reference optimum is known;
+- wall-clock time and solver-reported timing metadata.
 
 ## Tips
 
-- Always use `ExactSampler` on small instances to obtain the known optimum as a reference.
-- For stochastic samplers, run multiple independent trials and report statistics (mean, standard deviation, best).
-- Use [`BenchmarkTools.jl`](https://github.com/JuliaCI/BenchmarkTools.jl) for micro-benchmarks with `@benchmark` or `@btime`.
+- Use `ExactSampler` on small instances to obtain a known optimum.
+- Run multiple independent trials for stochastic samplers and report summary
+  statistics.
+- Keep model generation outside the timed region unless model construction is
+  part of the benchmark.
+- Use [`BenchmarkTools.jl`](https://github.com/JuliaCI/BenchmarkTools.jl) for
+  micro-benchmarks with `@benchmark` or `@btime`.
 - Scale problem sizes gradually to understand how sampler performance degrades.

@@ -1,3 +1,17 @@
+@doc raw"""
+    QUBODrivers
+
+Common MathOptInterface-compatible tools for QUBO and Ising samplers.
+
+`QUBODrivers` provides:
+
+- an [`AbstractSampler`](@ref) optimizer interface for QUBO-oriented solvers;
+- the [`@setup`](@ref) macro for declaring sampler optimizers and attributes;
+- built-in utility samplers in `ExactSampler`, `RandomSampler`, and
+  `IdentitySampler`;
+- result and model plumbing through MathOptInterface and QUBOTools;
+- an optional [`test`](@ref) suite for sampler implementations.
+"""
 module QUBODrivers
 
 import TOML

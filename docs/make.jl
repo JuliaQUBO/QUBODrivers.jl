@@ -5,7 +5,7 @@ using QUBODrivers
 DocMeta.setdocmeta!(QUBODrivers, :DocTestSetup, :(using QUBODrivers); recursive = true)
 
 makedocs(;
-    modules  = [QUBODrivers, QUBODrivers.QUBOTools],
+    modules  = [QUBODrivers],
     doctest  = true,
     clean    = true,
     warnonly = [:missing_docs],
@@ -23,8 +23,10 @@ makedocs(;
             "Solving QUBO"  => "manual/2-solve.md",
             "Samplers"      => "manual/3-samplers.md",
             "Sampler Setup" => "manual/4-setup.md",
+            "Implementing a Sampler" => "manual/7-integration.md",
             "Test Suite"    => "manual/5-tests.md",
             "Benchmarking"  => "manual/6-benchmarks.md",
+            "API Reference" => "manual/8-api.md",
         ],
         "Booklet" => [
             "Introduction"      => "booklet/1-intro.md",

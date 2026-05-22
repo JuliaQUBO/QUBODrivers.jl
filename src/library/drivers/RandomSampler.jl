@@ -9,6 +9,13 @@ using Random
 @doc raw"""
     RandomSampler.Optimizer{T}
 
+Sampler that evaluates uniformly random states.
+
+`RandomSampler` is a lightweight baseline for smoke tests, examples, and
+benchmark harnesses. It samples `NumberOfReads` independent states in the model
+domain, evaluates their objective values with QUBOTools, and returns all sampled
+states.
+
 ## Attributes
 - `RandomSeed`, `"seed"`: Random seed to initialize the random number generator.
 - `NumberOfReads`, `"num_reads"`: Number of random states sampled per run.

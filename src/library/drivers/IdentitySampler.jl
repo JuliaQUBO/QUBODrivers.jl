@@ -8,6 +8,11 @@ import QUBODrivers: MOI, Sample, SampleSet
     IdentitySampler.Optimizer{T}
 
 This sampler selects precisely the state vector provided as warm-start.
+Use it to check model conversion, objective evaluation, fixed variables, and
+warm-start plumbing without invoking a stochastic or external backend.
+
+Every variable must have a valid `MOI.VariablePrimalStart` value before
+optimization.
 """
 QUBODrivers.@setup Optimizer begin
     name    = "Identity Sampler"

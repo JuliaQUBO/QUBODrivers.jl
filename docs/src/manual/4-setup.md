@@ -1,13 +1,18 @@
 # Sampler Setup
 
-This guide aims to provide a tutorial on how to implement new sampler interfaces using [QUBODrivers.jl](https://github.com/JuliaQUBO/QUBODrivers.jl).
-To get your QUBO sampler running right now, [QUBODrivers.jl](https://github.com/JuliaQUBO/QUBODrivers.jl) will require only two main ingredients: a [`QUBODrivers.@setup`](@ref) macro call and a [`QUBODrivers.sample`](@ref) method implementation.
+This guide explains the pieces needed to define a sampler interface with
+QUBODrivers. The smallest useful wrapper has two parts:
+
+- a [`QUBODrivers.@setup`](@ref) macro call that declares the optimizer type and
+  attributes;
+- a [`QUBODrivers.sample`](@ref) method that reads the internal model, calls the
+  backend, and returns a `QUBOTools.SampleSet`.
 
 ## Imports
 
-First things first, we are going to import both [QUBODrivers.jl](https://github.com/JuliaQUBO/QUBODrivers.jl) and also [MathOptInterface.jl](https://github.com/jump-dev/MathOptInterface.jl), commonly aliased as `MOI`.
-Although not strictly necessary, we recommend that you also import [QUBOTools.jl](https://github.com/JuliaQUBO/QUBOTools.jl) for convenience, as it provides many useful functions for QUBO manipulation.
-It is readly available in the `QUBODrivers` module.
+Import QUBODrivers, MathOptInterface, and QUBOTools. QUBOTools is available
+through the `QUBODrivers` module and provides model conversion, objective
+evaluation, sample containers, and metadata helpers.
 
 ```julia
 import QUBODrivers
@@ -21,7 +26,9 @@ import MathOptInterface as MOI
 QUBODrivers.@setup
 ```
 
-This macro takes two arguments: the identifier of the sampler's `struct` (usually `Optimizer`), and a `begin...end` block containing configuration parameters as *key-value* pairs.
+This macro usually takes two arguments: the identifier of the sampler's `struct`
+(usually `Optimizer`) and a `begin ... end` block containing configuration
+parameters as key-value pairs.
 
 The first parameter of the configuration block is the sampler's name, which will be used to identify it in the `MOI.SolverName` attribute.
 
@@ -40,12 +47,17 @@ QUBODrivers.@setup Optimizer begin
 end
 ```
 
-We expect that most users will be happy with this approach and it is likely that it will fit most use cases.
+The generated optimizer has storage for the current QUBOTools model, raw
+attributes, the original MOI variable order, and fixed-variable metadata. If a
+sampler needs additional fields, define the optimizer type manually and
+implement the same methods described in the [API Reference](@ref).
 
 ### Attributes
 
-The `attributes` parameter is also given by a `begin...end` block and contains the sampler's attributes.
-These attributes are used to configure the sampler's behavior and are accessed by the `MOI.get` method.
+The `attributes` parameter is also a `begin ... end` block. Each entry declares
+a default value and optional type for a sampler option. Attributes are accessed
+with `MOI.get`, `MOI.set`, `MOI.RawOptimizerAttribute`, JuMP's
+`set_optimizer_attribute`, or the generated typed attribute.
 
 ```julia
 QUBODrivers.@setup Optimizer begin
@@ -56,6 +68,13 @@ QUBODrivers.@setup Optimizer begin
         SuperAttribute::String = "super"
     end
 end
+```
+
+In the example above, users can write either:
+
+```julia
+MOI.set(sampler, NumberOfReads(), 2_000)
+MOI.set(sampler, MOI.RawOptimizerAttribute("num_reads"), 2_000)
 ```
 
 ## The [`QUBODrivers.sample`](@ref) method
@@ -85,6 +104,11 @@ return QUBOTools.SampleSet(samples, metadata; sense = :min, domain = :bool)
 ```
 
 The `sense` keyword (`:min` or `:max`) and `domain` (`:bool` or `:spin`) tell QUBOTools how to interpret the samples.
+
+The metadata dictionary is the place to record backend status, timing, and
+diagnostics. QUBODrivers will add a total time and empty status string if they
+are missing, but backend-specific wrappers should provide as much useful
+metadata as their solver exposes.
 
 ## A complete example
 
@@ -137,7 +161,7 @@ function QUBODrivers.sample(sampler::Optimizer{T}) where {T}
     metadata = Dict{String,Any}(
         "num_reads"  => num_reads,
         "super_attr" => super_attr,
-        "time"       => clock.time,
+        "time"       => Dict{String,Any}("effective" => clock.time),
     )
 
     # ~ Return a SampleSet ~ #
