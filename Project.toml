@@ -20,6 +20,6 @@ MOI_PythonCall_Ext   = ["PythonCall"]
 [compat]
 MathOptInterface = "1"
 PythonCall       = "0.9"
-QUBOTools        = "0.10, 0.11"
+QUBOTools        = "0.10, 0.11, 0.12"
 Test             = "1"
-julia            = "1.9"
+julia            = "1.10"
