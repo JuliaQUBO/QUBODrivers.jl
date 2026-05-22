@@ -10,7 +10,8 @@ Common MathOptInterface-compatible tools for QUBO and Ising samplers.
 - built-in utility samplers in `ExactSampler`, `RandomSampler`, and
   `IdentitySampler`;
 - result and model plumbing through MathOptInterface and QUBOTools;
-- an optional [`test`](@ref) suite for sampler implementations.
+- optional [`test`](@ref) and [`benchmark`](@ref) helpers for sampler
+  implementations.
 """
 module QUBODrivers
 
@@ -36,6 +37,7 @@ export MOI, Sample, SampleSet, Spin, ↓, ↑
 include("interface/sampler.jl")
 include("interface/attributes.jl")
 include("interface/test.jl")
+include("interface/benchmark.jl")
 
 include("library/sampler/wrappers/moi.jl")
 include("library/sampler/wrappers/qubotools.jl")
