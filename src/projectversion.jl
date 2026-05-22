@@ -12,18 +12,12 @@ function __project__()
     return __PROJECT__[]::String
 end
 
-const __VERSION__ = Ref{Union{VersionNumber,Nothing}}(nothing)
-
 function __version__()::VersionNumber
-    if isnothing(__VERSION__[])
-        proj_file_path = abspath(__project__(), "Project.toml")
+    proj_file_path = abspath(__project__(), "Project.toml")
 
-        @assert isfile(proj_file_path)
+    @assert isfile(proj_file_path)
 
-        proj_file_data = TOML.parsefile(proj_file_path)
+    proj_file_data = TOML.parsefile(proj_file_path)
 
-        __VERSION__[] = VersionNumber(proj_file_data["version"])
-    end
-
-    return __VERSION__[]::VersionNumber
+    return VersionNumber(proj_file_data["version"])
 end

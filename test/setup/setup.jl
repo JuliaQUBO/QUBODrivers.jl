@@ -1,6 +1,21 @@
 function test_setup_macro()
     @testset "□ @setup macro" verbose = true begin
+        test_project_version()
         test_setup_spec_parser()
+    end
+
+    return nothing
+end
+
+function test_project_version()
+    @testset "→ Project Version" begin
+        project = QUBODrivers.TOML.parsefile(joinpath(QUBODrivers.__project__(), "Project.toml"))
+        version = VersionNumber(project["version"])
+
+        @test QUBODrivers.__version__() == version
+        @test MOI.get(ExactSampler.Optimizer(), MOI.SolverVersion()) == version
+        @test MOI.get(RandomSampler.Optimizer(), MOI.SolverVersion()) == version
+        @test MOI.get(IdentitySampler.Optimizer(), MOI.SolverVersion()) == version
     end
 
     return nothing
