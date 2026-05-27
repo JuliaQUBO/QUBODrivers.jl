@@ -6,6 +6,7 @@ const MIP_SQF{T} = MOI.ScalarQuadraticFunction{T}
 const MIP_SQT{T} = MOI.ScalarQuadraticTerm{T}
 
 const MIP_TEST_OPTIMIZER = MOI.OptimizerWithAttributes(GLPK.Optimizer, MOI.Silent() => true)
+const MIP_FAILING_OPTIMIZER = () -> error("test backend constructor failure")
 const MIP_PARITY_CASES = [
     (
         name = "bool linear",
@@ -80,6 +81,10 @@ function _config_mip_sampler!(model)
 
     return nothing
 end
+
+struct MIPThrowingSupportsBackend end
+
+MOI.supports(::MIPThrowingSupportsBackend, attr) = error("unsupported attribute: $(attr)")
 
 function _build_mip_test_model(::Type{T}, n::Integer; optimizer = MIP_TEST_OPTIMIZER) where {T}
     model = MOI.instantiate(MIPSampler.Optimizer; with_bridge_type = T)
@@ -179,12 +184,34 @@ function _test_mip_sampler_exact_parity()
     return nothing
 end
 
+function _test_mip_sampler_unoptimized_status()
+    @testset "Unoptimized status" begin
+        model = MOI.instantiate(MIPSampler.Optimizer; with_bridge_type = Float64)
+
+        @test MOI.get(model, MOI.TerminationStatus()) == MOI.OPTIMIZE_NOT_CALLED
+    end
+
+    return nothing
+end
+
 function _test_mip_sampler_missing_optimizer()
     @testset "Missing MIP optimizer" begin
         model = MOI.instantiate(MIPSampler.Optimizer; with_bridge_type = Float64)
         x, _ = MOI.add_constrained_variables(model, fill(MOI.ZeroOne(), 1))
 
         MOI.set(model, MOI.ObjectiveSense(), MOI.MIN_SENSE)
+        MOI.set(model, MOI.ObjectiveFunction{VI}(), x[1])
+
+        @test_throws ArgumentError MOI.optimize!(model)
+    end
+
+    return nothing
+end
+
+function _test_mip_sampler_invalid_optimizer_factory()
+    @testset "Invalid optimizer factory" begin
+        model, x = _build_mip_test_model(Float64, 1; optimizer = MIP_FAILING_OPTIMIZER)
+
         MOI.set(model, MOI.ObjectiveFunction{VI}(), x[1])
 
         @test_throws ArgumentError MOI.optimize!(model)
@@ -227,6 +254,28 @@ function _test_mip_sampler_plain_optimizer_factory()
         MOI.optimize!(model)
 
         _assert_single_solution(model, x, [1, 1], -3.0)
+    end
+
+    return nothing
+end
+
+function _test_mip_sampler_zero_and_diagonal_quadratic_terms()
+    @testset "Zero and diagonal quadratic terms" begin
+        backend = MOI.instantiate(GLPK.Optimizer; with_bridge_type = Float64)
+        x = MIPSampler._build_mip_model!(
+            backend,
+            2,
+            Dict(1 => 0.0, 2 => -2.0),
+            Dict((1, 1) => 3.0, (1, 2) => 0.0),
+            1.0,
+            0.5,
+        )
+
+        MOI.optimize!(backend)
+
+        @test MOI.get(backend, MOI.TerminationStatus()) == MOI.OPTIMAL
+        @test round.(Int, MOI.get.(backend, MOI.VariablePrimal(), x)) == [0, 1]
+        @test MOI.get(backend, MOI.ObjectiveValue()) ≈ -1.5
     end
 
     return nothing
@@ -297,16 +346,41 @@ function _test_mip_sampler_attribute_forwarding()
     return nothing
 end
 
+function _test_mip_sampler_optional_attribute_and_metadata_fallbacks()
+    @testset "Optional attributes and metadata fallbacks" begin
+        model, x = _build_mip_test_model(Float64, 1)
+
+        MOI.set(model, MOI.TimeLimitSec(), nothing)
+        MOI.set(model, MOI.ObjectiveFunction{VI}(), x[1])
+
+        MOI.optimize!(model)
+
+        raw = MOI.get(model, MOI.RawSolver())
+        metadata = QUBOTools.metadata(QUBOTools.solution(raw))
+
+        @test !("MOI.TimeLimitSec" in metadata["attributes"]["forwarded"])
+        @test MIPSampler._backend_attribute(MOI.Utilities.Model{Float64}(), MOI.SolverName()) ===
+              nothing
+        @test !MIPSampler._supports_attribute(MIPThrowingSupportsBackend(), MOI.Silent())
+    end
+
+    return nothing
+end
+
 function test_mip_sampler()
     QUBODrivers.test(_config_mip_sampler!, MIPSampler.Optimizer)
 
     @testset "□ MIPSampler" verbose = true begin
+        _test_mip_sampler_unoptimized_status()
         _test_mip_sampler_missing_optimizer()
+        _test_mip_sampler_invalid_optimizer_factory()
         _test_mip_sampler_linear_only()
         _test_mip_sampler_plain_optimizer_factory()
+        _test_mip_sampler_zero_and_diagonal_quadratic_terms()
         _test_mip_sampler_quadratic_only()
         _test_mip_sampler_mixed_quadratic_signs()
         _test_mip_sampler_attribute_forwarding()
+        _test_mip_sampler_optional_attribute_and_metadata_fallbacks()
         _test_mip_sampler_exact_parity()
     end
 
