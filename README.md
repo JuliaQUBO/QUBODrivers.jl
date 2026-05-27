@@ -79,7 +79,7 @@ end
 
 | Package                                                           |  Solvers                                         |
 | :---------------------------------------------------------------- | :----------------------------------------------- |
-| [`QUBODrivers.jl`](https://github.com/JuliaQUBO/QUBODrivers.jl)   | `ExactSampler` `RandomSampler` `IdentitySampler` |
+| [`QUBODrivers.jl`](https://github.com/JuliaQUBO/QUBODrivers.jl)   | `ExactSampler` `RandomSampler` `IdentitySampler` `MIPSampler` |
 | [`QiskitOpt.jl`](https://github.com/JuliaQUBO/QiskitOpt.jl)       | `QiskitOpt.QAOA` `QiskitOpt.VQE`                 |
 | [`DWave.jl`](https://github.com/JuliaQUBO/DWave.jl)               | `DWave` `DWave.Neal`                             |
 | [`PySA.jl`](https://github.com/JuliaQUBO/PySA.jl)                 | `PySA`                                           |

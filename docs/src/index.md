@@ -9,8 +9,8 @@ samplers and annealing backends.
 
 The package includes:
 
-- utility samplers for exact enumeration, random sampling, and warm-start
-  identity sampling;
+- utility samplers for exact enumeration, random sampling, warm-start identity
+  sampling, and MIP-backed baseline solving;
 - a macro for declaring sampler optimizers and user-facing attributes;
 - MOI and QUBOTools plumbing for model conversion and result access;
 - a reusable test suite for sampler implementations.
