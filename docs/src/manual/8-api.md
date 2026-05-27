@@ -36,6 +36,8 @@ QUBODrivers.default_raw_attr
 QUBODrivers.ExactSampler.Optimizer
 QUBODrivers.RandomSampler.Optimizer
 QUBODrivers.IdentitySampler.Optimizer
+QUBODrivers.MIPSampler.Optimizer
+QUBODrivers.MIPSampler.MIPOptimizer
 ```
 
 ## Test and Benchmark Helpers

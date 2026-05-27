@@ -7,8 +7,8 @@ Common MathOptInterface-compatible tools for QUBO and Ising samplers.
 
 - an [`AbstractSampler`](@ref) optimizer interface for QUBO-oriented solvers;
 - the [`@setup`](@ref) macro for declaring sampler optimizers and attributes;
-- built-in utility samplers in `ExactSampler`, `RandomSampler`, and
-  `IdentitySampler`;
+- built-in utility samplers in `ExactSampler`, `RandomSampler`,
+  `IdentitySampler`, and `MIPSampler`;
 - result and model plumbing through MathOptInterface and QUBOTools;
 - optional [`test`](@ref) and [`benchmark`](@ref) helpers for sampler
   implementations.
@@ -49,10 +49,11 @@ include("library/setup/quote.jl")
 include("library/setup/macro.jl")
 
 export AbstractSampler
-export ExactSampler, IdentitySampler, RandomSampler
+export ExactSampler, IdentitySampler, MIPSampler, RandomSampler
 
 include("library/drivers/ExactSampler.jl")
 include("library/drivers/IdentitySampler.jl")
+include("library/drivers/MIPSampler.jl")
 include("library/drivers/RandomSampler.jl")
 
 end # module QUBODrivers

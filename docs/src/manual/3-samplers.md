@@ -1,14 +1,15 @@
 # Samplers
 
-QUBODrivers includes three utility samplers. They are intentionally simple:
+QUBODrivers includes four utility samplers. They are intentionally simple:
 their main role is to exercise the interface, provide small-instance baselines,
-and make examples runnable without external services.
+and make examples runnable without external services or fixed solver choices.
 
 | Sampler | Purpose | Main result behavior |
 | :-- | :-- | :-- |
 | [`ExactSampler.Optimizer`](@ref) | Exhaustive enumeration for small models | returns every state |
 | [`RandomSampler.Optimizer`](@ref) | Random baseline and smoke tests | returns `num_reads` random states |
 | [`IdentitySampler.Optimizer`](@ref) | Warm-start and conversion checks | returns the provided start state |
+| [`MIPSampler.Optimizer`](@ref) | Exact MIP-backed baseline using a user-supplied MOI optimizer | returns one best incumbent |
 
 ## Exact Sampler
 
@@ -99,6 +100,42 @@ MOI.optimize!(model)
 
 ```@docs
 QUBODrivers.IdentitySampler.Optimizer
+```
+
+## MIP Sampler
+
+Use `MIPSampler` as an exact correctness baseline for small and medium QUBO
+instances when you want to choose the MIP backend yourself. The sampler is
+implemented directly against MathOptInterface and does not depend on JuMP or on
+any concrete MIP solver package.
+
+```julia
+using JuMP
+using QUBODrivers
+using GLPK
+
+model = Model(MIPSampler.Optimizer)
+set_attribute(model, MIPSampler.MIPOptimizer(), GLPK.Optimizer)
+
+@variable(model, x[1:3], Bin)
+@objective(model, Min, x[1] + x[2] - 2x[1] * x[3])
+
+optimize!(model)
+
+value.(x)
+objective_value(model)
+```
+
+Internally, `MIPSampler` linearizes binary products with auxiliary variables
+and the standard Fortet/McCormick inequalities. The reformulation is a baseline
+route, not a replacement for specialized large-scale QUBO heuristics. For a
+broader discussion of efficient binary polynomial reformulations, see Elloumi,
+Sourour, and Verchere, "Efficient linear reformulations for binary polynomial
+optimization problems", Computers & Operations Research 155 (2023), 106240.
+
+```@docs
+QUBODrivers.MIPSampler.Optimizer
+QUBODrivers.MIPSampler.MIPOptimizer
 ```
 
 ## External Sampler Packages
