@@ -13,10 +13,10 @@ function _config_mip_sampler!(model)
     return nothing
 end
 
-function _build_mip_test_model(::Type{T}, n::Integer) where {T}
+function _build_mip_test_model(::Type{T}, n::Integer; optimizer = MIP_TEST_OPTIMIZER) where {T}
     model = MOI.instantiate(MIPSampler.Optimizer; with_bridge_type = T)
 
-    MOI.set(model, MIPSampler.MIPOptimizer(), MIP_TEST_OPTIMIZER)
+    MOI.set(model, MIPSampler.MIPOptimizer(), optimizer)
 
     x, _ = MOI.add_constrained_variables(model, fill(MOI.ZeroOne(), n))
 
@@ -64,6 +64,24 @@ function _test_mip_sampler_linear_only()
         MOI.optimize!(model)
 
         _assert_single_solution(model, x, [0, 1, 0], -3.0)
+    end
+
+    return nothing
+end
+
+function _test_mip_sampler_plain_optimizer_factory()
+    @testset "Plain optimizer factory" begin
+        model, x = _build_mip_test_model(Float64, 2; optimizer = GLPK.Optimizer)
+        f = MIP_SQF{Float64}(
+            MIP_SQT{Float64}[MIP_SQT{Float64}(-3.0, x[1], x[2])],
+            MIP_SAT{Float64}[],
+            0.0,
+        )
+
+        MOI.set(model, MOI.ObjectiveFunction{typeof(f)}(), f)
+        MOI.optimize!(model)
+
+        _assert_single_solution(model, x, [1, 1], -3.0)
     end
 
     return nothing
@@ -140,6 +158,7 @@ function test_mip_sampler()
     @testset "□ MIPSampler" verbose = true begin
         _test_mip_sampler_missing_optimizer()
         _test_mip_sampler_linear_only()
+        _test_mip_sampler_plain_optimizer_factory()
         _test_mip_sampler_quadratic_only()
         _test_mip_sampler_mixed_quadratic_signs()
         _test_mip_sampler_attribute_forwarding()
