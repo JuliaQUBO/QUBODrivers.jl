@@ -15,6 +15,7 @@ DEPRECATED_WORKFLOW_REFERENCES = (
     "actions/setup-python@v5",
     "julia-actions/setup-julia@v1",
     "julia-actions/setup-julia@latest",
+    "actions/labeler@v5",
     "codecov/codecov-action@v5",
     "windows-latest",
 )

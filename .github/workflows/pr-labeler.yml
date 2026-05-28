@@ -14,6 +14,11 @@ permissions:
 
 jobs:
   label:
-    uses: JuliaQUBO/.github/.github/workflows/pr-labeler.yml@02781d5b27dd8f0d2bc5b1fe3845eff7113244ec
-    with:
-      configuration_path: .github/labeler.yml
+    runs-on: ubuntu-latest
+    steps:
+      - name: Apply path-based PR labels
+        uses: actions/labeler@v6
+        with:
+          repo-token: ${{ github.token }}
+          sync-labels: false
+          configuration-path: .github/labeler.yml

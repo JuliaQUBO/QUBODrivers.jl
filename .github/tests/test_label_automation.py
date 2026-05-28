@@ -83,6 +83,32 @@ class LabelAutomationContractTests(unittest.TestCase):
             header,
         )
 
+    def test_pr_labeler_uses_node24_labeler_action(self) -> None:
+        workflow = self.load_yaml(".github/workflows/pr-labeler.yml")
+        steps = workflow["jobs"]["label"]["steps"]
+
+        self.assertIn("actions/labeler@v6", [step.get("uses") for step in steps])
+
+    def test_shared_label_maintenance_uses_node24_checkout(self) -> None:
+        for workflow_path, job_name in (
+            (".github/workflows/label-sync.yml", "sync"),
+            (".github/workflows/label-backfill.yml", "backfill"),
+        ):
+            workflow = self.load_yaml(workflow_path)
+            steps = workflow["jobs"][job_name]["steps"]
+            checkout_steps = [
+                step
+                for step in steps
+                if step.get("uses") == "actions/checkout@v6"
+                and step.get("with", {}).get("repository") == "JuliaQUBO/.github"
+            ]
+
+            self.assertEqual(
+                len(checkout_steps),
+                1,
+                f"{workflow_path} should check out shared label automation with checkout@v6",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

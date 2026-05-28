@@ -17,6 +17,22 @@ permissions:
 
 jobs:
   sync:
-    uses: JuliaQUBO/.github/.github/workflows/sync-labels.yml@02781d5b27dd8f0d2bc5b1fe3845eff7113244ec
-    with:
-      dry_run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
+    runs-on: ubuntu-latest
+    env:
+      SHARED_AUTOMATION_REF: 02781d5b27dd8f0d2bc5b1fe3845eff7113244ec
+    steps:
+      - name: Checkout shared automation repository
+        uses: actions/checkout@v6
+        with:
+          repository: JuliaQUBO/.github
+          ref: ${{ env.SHARED_AUTOMATION_REF }}
+          path: shared
+
+      - name: Sync labels
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
+          LABELS_FILE: shared/.github/labels/shared-labels.json
+        run: bash shared/.github/scripts/sync-labels.sh
