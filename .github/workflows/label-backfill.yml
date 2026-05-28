@@ -21,7 +21,22 @@ permissions:
 
 jobs:
   backfill:
-    uses: JuliaQUBO/.github/.github/workflows/backfill-labels.yml@02781d5b27dd8f0d2bc5b1fe3845eff7113244ec
-    with:
-      dry_run: ${{ inputs.dry_run }}
-      max_items: ${{ inputs.max_items }}
+    runs-on: ubuntu-latest
+    env:
+      SHARED_AUTOMATION_REF: 02781d5b27dd8f0d2bc5b1fe3845eff7113244ec
+    steps:
+      - name: Checkout shared automation repository
+        uses: actions/checkout@v6
+        with:
+          repository: JuliaQUBO/.github
+          ref: ${{ env.SHARED_AUTOMATION_REF }}
+          path: shared
+
+      - name: Backfill labels
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          MAX_ITEMS: ${{ inputs.max_items }}
+        run: bash shared/.github/scripts/backfill-labels.sh
