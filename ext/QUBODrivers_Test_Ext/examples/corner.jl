@@ -14,7 +14,7 @@ Some solvers will only return answers for variables present in the expression[^Q
 ```
 
 ## Related Issues
-[^QUBODrivers#6]: QUBODrivers.jl Issue [#6](https://github.com/psrenergy/QUBODrivers.jl/issues/6)
+[^QUBODrivers#6]: QUBODrivers.jl Issue [#6](https://github.com/JuliaQUBO/QUBODrivers.jl/issues/6)
 
 """
 function _test_corner_blanks(
