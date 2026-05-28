@@ -25,3 +25,11 @@ Manifest.toml
 
 # PythonCall
 .CondaPkg
+
+# Python cache artifacts
+__pycache__/
+*.py[cod]
+
+# Local development artifacts
+.julia-depot/
+.vscode/
