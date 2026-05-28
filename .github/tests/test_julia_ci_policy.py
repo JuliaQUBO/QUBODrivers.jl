@@ -9,6 +9,15 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 MINIMUM_JULIA_VERSION = "1.10"
 LATEST_STABLE_JULIA_VERSION = "1"
 QUBOTOOLS_COMPAT_VERSION = "0.12"
+SUPPORTED_CI_RUNNERS = {"ubuntu-latest", "windows-2025-vs2026"}
+DEPRECATED_WORKFLOW_REFERENCES = (
+    "actions/checkout@v4",
+    "actions/setup-python@v5",
+    "julia-actions/setup-julia@v1",
+    "julia-actions/setup-julia@latest",
+    "codecov/codecov-action@v5",
+    "windows-latest",
+)
 
 
 class JuliaCiPolicyTests(unittest.TestCase):
@@ -44,6 +53,12 @@ class JuliaCiPolicyTests(unittest.TestCase):
 
         self.assertEqual(versions, {MINIMUM_JULIA_VERSION, LATEST_STABLE_JULIA_VERSION})
 
+    def test_ci_matrix_uses_explicit_supported_runners(self) -> None:
+        workflow = self.load_yaml(".github/workflows/ci.yml")
+        matrix = workflow["jobs"]["test"]["strategy"]["matrix"]
+
+        self.assertEqual(set(matrix["os"]), SUPPORTED_CI_RUNNERS)
+
     def test_documentation_build_uses_latest_stable_julia(self) -> None:
         workflow = self.load_yaml(".github/workflows/documentation.yml")
         steps = workflow["jobs"]["build"]["steps"]
@@ -58,6 +73,15 @@ class JuliaCiPolicyTests(unittest.TestCase):
             setup_steps[0]["with"]["version"],
             LATEST_STABLE_JULIA_VERSION,
         )
+
+    def test_workflows_do_not_use_deprecated_action_or_runner_references(self) -> None:
+        workflow_text = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in sorted((ROOT / ".github" / "workflows").glob("*.yml"))
+        )
+
+        for reference in DEPRECATED_WORKFLOW_REFERENCES:
+            self.assertNotIn(reference, workflow_text)
 
 
 if __name__ == "__main__":
