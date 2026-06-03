@@ -75,6 +75,51 @@ class JuliaCiPolicyTests(unittest.TestCase):
             LATEST_STABLE_JULIA_VERSION,
         )
 
+    def test_dependabot_tracks_julia_compat_environments(self) -> None:
+        dependabot = self.load_yaml(".github/dependabot.yml")
+        expected_groups_by_directory = {
+            "/": "root-julia-dependencies",
+            "/docs": "docs-julia-dependencies",
+            "/test": "test-julia-dependencies",
+        }
+
+        julia_updates = {
+            update["directory"]: update
+            for update in dependabot["updates"]
+            if update["package-ecosystem"] == "julia"
+        }
+
+        self.assertEqual(
+            set(julia_updates),
+            set(expected_groups_by_directory),
+        )
+
+        for directory, group_name in expected_groups_by_directory.items():
+            project_path = (
+                "Project.toml"
+                if directory == "/"
+                else f"{directory.removeprefix('/')}/Project.toml"
+            )
+
+            self.assertIn("compat", self.load_toml(project_path))
+            self.assertEqual(julia_updates[directory]["schedule"]["interval"], "weekly")
+            self.assertEqual(
+                julia_updates[directory]["groups"][group_name]["patterns"],
+                ["*"],
+            )
+
+    def test_dependabot_tracks_github_actions_monthly(self) -> None:
+        dependabot = self.load_yaml(".github/dependabot.yml")
+        github_actions_updates = [
+            update
+            for update in dependabot["updates"]
+            if update["package-ecosystem"] == "github-actions"
+        ]
+
+        self.assertEqual(len(github_actions_updates), 1)
+        self.assertEqual(github_actions_updates[0]["directory"], "/")
+        self.assertEqual(github_actions_updates[0]["schedule"]["interval"], "monthly")
+
     def test_workflows_do_not_use_deprecated_action_or_runner_references(self) -> None:
         workflow_text = "\n".join(
             path.read_text(encoding="utf-8")
