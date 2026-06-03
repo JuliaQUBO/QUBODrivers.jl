@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## v0.5.1 - 2026-06-03
+
+- Add Dependabot dependency maintenance for Julia environments and GitHub
+  Actions workflows.
+- Skip documentation preview deployment for Dependabot pull requests so docs
+  builds can still validate dependency updates without requiring write access
+  to `gh-pages`.
+- Add `TOML` compatibility bounds for the root package environment and build
+  documentation against QUBODrivers 0.5.
+
 ## v0.5.0 - 2026-05-27
 
 - Add `MIPSampler.Optimizer`, an MOI-native exact MIP-backed baseline sampler
