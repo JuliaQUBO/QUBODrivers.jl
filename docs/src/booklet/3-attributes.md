@@ -4,6 +4,8 @@
 
 ```@docs
 QUBODrivers.SamplerAttribute
+QUBODrivers.FinalNumberOfReads
+QUBODrivers.final_number_of_reads
 ```
 
 ```@docs
@@ -16,6 +18,20 @@ QUBODrivers.get_raw_attr
 QUBODrivers.set_raw_attr!
 QUBODrivers.default_raw_attr
 ```
+
+## Standard sampler attributes
+
+Generated optimizers created with [`QUBODrivers.@setup`](@ref) support
+`QUBODrivers.FinalNumberOfReads()` and the raw key `"final_num_reads"`.
+
+Use `"num_reads"` for reads spent during a sampler's internal search,
+optimization, or objective evaluations. Use `"final_num_reads"` for reads used
+to build the returned `SampleSet`. If `"final_num_reads"` is unset, the
+effective final read count defaults to `"num_reads"` when the sampler supports
+that attribute.
+
+Built-in samplers that do not have a separate final sampling phase document the
+attribute as ignored and report their fixed returned read count in metadata.
 
 ## An advanced example
 

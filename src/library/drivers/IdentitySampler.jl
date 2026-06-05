@@ -13,6 +13,9 @@ warm-start plumbing without invoking a stochastic or external backend.
 
 Every variable must have a valid `MOI.VariablePrimalStart` value before
 optimization.
+
+`IdentitySampler` ignores `QUBODrivers.FinalNumberOfReads`; it always returns
+the single warm-start state.
 """
 QUBODrivers.@setup Optimizer begin
     name    = "Identity Sampler"
@@ -51,10 +54,16 @@ function QUBODrivers.sample(sampler::Optimizer{T}) where {T}
     end
 
     # Write Solution Metadata
-    metadata = Dict{String,Any}(
-        "origin" => "Identity Sampler @ QUBODrivers.jl",
-        "time"   => Dict{String,Any}("effective" => results.time),
+    metadata = QUBODrivers._sampler_metadata(
+        origin                = "Identity Sampler @ QUBODrivers.jl",
+        algorithm_name        = "Identity Sampler",
+        execution_mode        = "warm_start",
+        optimizer_evaluations = 1,
+        final_number_of_reads = 1,
+        status                = "locally_solved",
+        termination_status    = MOI.LOCALLY_SOLVED,
     )
+    metadata["time"] = Dict{String,Any}("effective" => results.time)
 
     return SampleSet{T}(samples, metadata; sense = :min, domain = :bool)
 end

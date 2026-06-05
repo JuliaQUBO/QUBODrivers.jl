@@ -77,6 +77,14 @@ MOI.set(sampler, NumberOfReads(), 2_000)
 MOI.set(sampler, MOI.RawOptimizerAttribute("num_reads"), 2_000)
 ```
 
+Every generated optimizer also supports
+`QUBODrivers.FinalNumberOfReads()` and the raw key `"final_num_reads"`.
+`"num_reads"` controls reads used by a sampler's internal search or optimizer
+evaluations. `"final_num_reads"` controls the reads used to build the returned
+`SampleSet`. If `"final_num_reads"` is unset, call
+`QUBODrivers.final_number_of_reads(sampler)` to get the effective value; it
+defaults to `"num_reads"` when that attribute is supported.
+
 ## The [`QUBODrivers.sample`](@ref) method
 
 ```@docs
@@ -109,6 +117,20 @@ The metadata dictionary is the place to record backend status, timing, and
 diagnostics. QUBODrivers will add a total time and empty status string if they
 are missing, but backend-specific wrappers should provide as much useful
 metadata as their solver exposes.
+
+QUBODrivers recommends these top-level metadata keys for driver attributes:
+
+- `"algorithm"`: dictionary with at least `"name"`;
+- `"backend"`: dictionary with backend `"name"` and `"version"` when known;
+- `"execution"`: dictionary with `"mode"`;
+- `"optimizer"`: dictionary with `"iterations"` and objective/backend
+  `"evaluations"` actually performed, when known;
+- `"reads"`: dictionary with `"number_of_reads"` and
+  `"final_number_of_reads"` counts actually consumed by internal search and
+  final sample-set construction, respectively; if there is no separate
+  internal phase, both values may be the same;
+- `"seeds"`: dictionary of sampler, model, optimizer, or backend seeds;
+- `"status"` and `"termination_status"`: raw and structured termination status.
 
 ## A complete example
 
@@ -143,12 +165,13 @@ function QUBODrivers.sample(sampler::Optimizer{T}) where {T}
 
     # ~ Retrieve Attributes using MathOptInterface ~ #
     num_reads  = MOI.get(sampler, NumberOfReads())
+    final_reads = MOI.get(sampler, QUBODrivers.FinalNumberOfReads())
     super_attr = MOI.get(sampler, SuperAttribute())
 
     # ~ Do some sampling ~ #
     samples = QUBOTools.Sample{T,Int}[]
 
-    clock = @timed for _ = 1:num_reads
+    clock = @timed for _ = 1:final_reads
         ψ = super_sample(n, h, J, super_attr)
         λ = QUBOTools.value(ψ, h, J, α, β)
 
@@ -159,9 +182,18 @@ function QUBODrivers.sample(sampler::Optimizer{T}) where {T}
 
     # ~ Store some metadata ~ #
     metadata = Dict{String,Any}(
-        "num_reads"  => num_reads,
+        "algorithm" => Dict{String,Any}("name" => "Super Sampler"),
+        "backend"   => Dict{String,Any}("name" => "SuperBackend", "version" => nothing),
+        "execution" => Dict{String,Any}("mode" => "sampling"),
+        "optimizer" => Dict{String,Any}("iterations" => nothing, "evaluations" => final_reads),
+        "reads"     => Dict{String,Any}(
+            "number_of_reads"       => final_reads,
+            "final_number_of_reads" => final_reads,
+        ),
+        "seeds"     => Dict{String,Any}(),
+        "status"    => "locally_solved",
         "super_attr" => super_attr,
-        "time"       => Dict{String,Any}("effective" => clock.time),
+        "time"      => Dict{String,Any}("effective" => clock.time),
     )
 
     # ~ Return a SampleSet ~ #
