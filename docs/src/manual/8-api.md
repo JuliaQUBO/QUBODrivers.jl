@@ -23,6 +23,8 @@ QUBODrivers.set_model!
 ```@docs; canonical=false
 QUBODrivers.@setup
 QUBODrivers.SamplerAttribute
+QUBODrivers.FinalNumberOfReads
+QUBODrivers.final_number_of_reads
 QUBODrivers.RawSamplerAttribute
 QUBODrivers.@raw_attr_str
 QUBODrivers.get_raw_attr

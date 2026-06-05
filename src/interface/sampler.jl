@@ -34,6 +34,51 @@ function sample(::S) where {S<:AbstractSampler}
     error("`QUBODrivers.sample` is not implemented for '$S'")
 end
 
+function _sampler_metadata(;
+    origin::String,
+    algorithm_name::String,
+    backend_name = "QUBODrivers.jl",
+    backend_version = __version__(),
+    execution_mode::String,
+    optimizer_iterations = nothing,
+    optimizer_evaluations = nothing,
+    number_of_reads = nothing,
+    final_number_of_reads = nothing,
+    seeds::Dict{String,Any} = Dict{String,Any}(),
+    status::String = "",
+    termination_status = nothing,
+)
+    metadata = Dict{String,Any}(
+        "origin"    => origin,
+        "algorithm" => Dict{String,Any}(
+            "name" => algorithm_name,
+        ),
+        "backend"   => Dict{String,Any}(
+            "name"    => backend_name,
+            "version" => backend_version,
+        ),
+        "execution" => Dict{String,Any}(
+            "mode" => execution_mode,
+        ),
+        "optimizer" => Dict{String,Any}(
+            "iterations"  => optimizer_iterations,
+            "evaluations" => optimizer_evaluations,
+        ),
+        "reads"     => Dict{String,Any}(
+            "number_of_reads"       => number_of_reads,
+            "final_number_of_reads" => final_number_of_reads,
+        ),
+        "seeds"     => seeds,
+        "status"    => status,
+    )
+
+    if !isnothing(termination_status)
+        metadata["termination_status"] = termination_status
+    end
+
+    return metadata
+end
+
 @doc raw"""
     set_model!(sampler::AbstractSampler{T}, model::QUBOTools.Model{VI,T,Int}) where {T}
 

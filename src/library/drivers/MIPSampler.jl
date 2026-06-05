@@ -26,6 +26,7 @@ Verchere, "Efficient linear reformulations for binary polynomial optimization
 problems", Computers & Operations Research 155 (2023), 106240.
 
 Only one best incumbent sample is returned.
+`MIPSampler` ignores `QUBODrivers.FinalNumberOfReads`.
 
 ## Attributes
 - `MIPOptimizer`, `"mip_optimizer"`: MOI-compatible optimizer factory used to
@@ -270,21 +271,23 @@ function QUBODrivers.sample(sampler::Optimizer{T}) where {T}
     λ = QUBOTools.value(ψ, L, Q, α, β)
     sample = Sample{T,Int}(ψ, λ)
 
-    metadata = Dict{String,Any}(
-        "origin"             => "MIP Sampler @ QUBODrivers.jl",
-        "backend"            => Dict{String,Any}(
-            "name"    => _backend_attribute(backend, MOI.SolverName()),
-            "version" => _backend_attribute(backend, MOI.SolverVersion()),
-        ),
-        "time"               => Dict{String,Any}(
-            "build"     => build_results.time,
-            "effective" => solve_results.time,
-        ),
-        "status"             => string(termination_status),
-        "termination_status" => termination_status,
-        "primal_status"      => primal_status,
-        "attributes"         => Dict{String,Any}("forwarded" => forwarded_attributes),
+    metadata = QUBODrivers._sampler_metadata(
+        origin                = "MIP Sampler @ QUBODrivers.jl",
+        algorithm_name        = "MIP Sampler",
+        backend_name          = _backend_attribute(backend, MOI.SolverName()),
+        backend_version       = _backend_attribute(backend, MOI.SolverVersion()),
+        execution_mode        = "mip_solve",
+        optimizer_evaluations = 1,
+        final_number_of_reads = 1,
+        status                = string(termination_status),
+        termination_status    = termination_status,
     )
+    metadata["time"] = Dict{String,Any}(
+        "build"     => build_results.time,
+        "effective" => solve_results.time,
+    )
+    metadata["primal_status"] = primal_status
+    metadata["attributes"] = Dict{String,Any}("forwarded" => forwarded_attributes)
 
     return SampleSet{T}([sample], metadata; sense = :min, domain = :bool)
 end

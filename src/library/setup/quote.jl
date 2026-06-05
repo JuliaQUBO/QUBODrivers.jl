@@ -127,6 +127,9 @@ function __setup_quote_interface(spec::_SamplerSpec)
         # Attributes - MOI
         $(__setup_quote_moi_attrs(spec))
 
+        # Attributes - QUBODrivers
+        $(__setup_quote_qubodrivers_attrs(spec))
+
         # Attributes - specific dispatch
         $((map(attr_spec -> __setup_quote_attribute(spec, attr_spec), spec.attributes))...)
     end
@@ -253,6 +256,47 @@ function __setup_quote_moi_attrs(spec::_SamplerSpec)
 
         # MOI.VariablePrimalStart - Support
         MOI.supports(::$(Optimizer), ::Union{MOI.VariablePrimalStart, raw_attr"moi/variableprimalstart"}) = true
+    end
+end
+
+function __setup_quote_qubodrivers_attrs(spec::_SamplerSpec)
+    Optimizer = esc(spec.id)
+
+    return quote
+        # QUBODrivers.FinalNumberOfReads - get
+        function MOI.get(sampler::$(Optimizer), ::QUBODrivers.FinalNumberOfReads)
+            return QUBODrivers.final_number_of_reads(sampler)
+        end
+
+        function MOI.get(sampler::$(Optimizer), attr::QUBODrivers._RawFinalNumberOfReads)
+            value = QUBODrivers.get_raw_attr(sampler, attr)
+
+            if isnothing(value)
+                return QUBODrivers._default_number_of_reads(sampler)
+            else
+                return value
+            end
+        end
+
+        QUBODrivers.default_raw_attr(::$(Optimizer), ::QUBODrivers._RawFinalNumberOfReads) = nothing
+
+        # QUBODrivers.FinalNumberOfReads - set
+        function MOI.set(sampler::$(Optimizer), ::QUBODrivers.FinalNumberOfReads, value)
+            return MOI.set(sampler, QUBODrivers._RawFinalNumberOfReads(), value)
+        end
+
+        function MOI.set(sampler::$(Optimizer), attr::QUBODrivers._RawFinalNumberOfReads, value)
+            QUBODrivers._validate_final_number_of_reads(value)
+            QUBODrivers.set_raw_attr!(sampler, attr, value)
+
+            return nothing
+        end
+
+        # QUBODrivers.FinalNumberOfReads - support
+        MOI.supports(
+            ::$(Optimizer),
+            ::Union{QUBODrivers.FinalNumberOfReads,QUBODrivers._RawFinalNumberOfReads},
+        ) = true
     end
 end
 

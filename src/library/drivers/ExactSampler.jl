@@ -13,6 +13,9 @@ It is useful as a correctness oracle for small QUBO and Ising models.
 !!! warn
     Due to the exponentially large number of visited states, this sampler is
     intended only for small instances.
+
+`ExactSampler` ignores `QUBODrivers.FinalNumberOfReads`; it always returns the
+full exhaustive sample set.
 """
 QUBODrivers.@setup Optimizer begin
     name    = "Exact Sampler"
@@ -38,11 +41,16 @@ function QUBODrivers.sample(sampler::Optimizer{T}) where {T}
     end
 
     # Write Solution Metadata
-    metadata = Dict{String,Any}(
-        "origin" => "Exact Sampler @ QUBODrivers.jl",
-        "time"   => Dict{String,Any}("effective" => results.time),
-        "status" => "optimal",
+    metadata = QUBODrivers._sampler_metadata(
+        origin                = "Exact Sampler @ QUBODrivers.jl",
+        algorithm_name        = "Exact Sampler",
+        execution_mode        = "exhaustive_search",
+        optimizer_evaluations = m,
+        final_number_of_reads = m,
+        status                = "optimal",
+        termination_status    = MOI.OPTIMAL,
     )
+    metadata["time"] = Dict{String,Any}("effective" => results.time)
 
     return SampleSet{T}(samples, metadata; sense = :min, domain = :bool)
 end

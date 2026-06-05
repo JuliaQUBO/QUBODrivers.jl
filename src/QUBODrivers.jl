@@ -48,7 +48,7 @@ include("library/setup/parse.jl")
 include("library/setup/quote.jl")
 include("library/setup/macro.jl")
 
-export AbstractSampler
+export AbstractSampler, FinalNumberOfReads, final_number_of_reads
 export ExactSampler, IdentitySampler, MIPSampler, RandomSampler
 
 include("library/drivers/ExactSampler.jl")
