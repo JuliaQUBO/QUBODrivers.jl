@@ -110,10 +110,11 @@ returned value falls back to raw `"num_reads"` when supported; otherwise it is
 `nothing`.
 """
 function final_number_of_reads(sampler::AbstractSampler)
+    attr = _RawFinalNumberOfReads()
     final_reads = try
-        MOI.get(sampler, _RawFinalNumberOfReads())
-    catch
-        nothing
+        MOI.get(sampler, attr)
+    catch err
+        _is_unavailable_raw_attr(err, attr) ? nothing : rethrow()
     end
 
     if isnothing(final_reads)
@@ -123,6 +124,10 @@ function final_number_of_reads(sampler::AbstractSampler)
     end
 end
 
+function _is_unavailable_raw_attr(err, attr::RawSamplerAttribute)
+    return err isa MOI.GetAttributeNotAllowed{typeof(attr)}
+end
+
 function _default_number_of_reads(sampler::AbstractSampler)
     attr = _RawNumberOfReads()
 
@@ -130,8 +135,8 @@ function _default_number_of_reads(sampler::AbstractSampler)
         MOI.supports(sampler, attr) || return nothing
 
         return MOI.get(sampler, attr)
-    catch
-        return nothing
+    catch err
+        _is_unavailable_raw_attr(err, attr) ? nothing : rethrow()
     end
 end
 

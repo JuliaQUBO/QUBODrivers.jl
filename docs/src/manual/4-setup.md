@@ -123,9 +123,12 @@ QUBODrivers recommends these top-level metadata keys for driver attributes:
 - `"algorithm"`: dictionary with at least `"name"`;
 - `"backend"`: dictionary with backend `"name"` and `"version"` when known;
 - `"execution"`: dictionary with `"mode"`;
-- `"optimizer"`: dictionary with `"iterations"` and `"evaluations"` when known;
+- `"optimizer"`: dictionary with `"iterations"` and objective/backend
+  `"evaluations"` actually performed, when known;
 - `"reads"`: dictionary with `"number_of_reads"` and
-  `"final_number_of_reads"`;
+  `"final_number_of_reads"` counts actually consumed by internal search and
+  final sample-set construction, respectively; if there is no separate
+  internal phase, both values may be the same;
 - `"seeds"`: dictionary of sampler, model, optimizer, or backend seeds;
 - `"status"` and `"termination_status"`: raw and structured termination status.
 
@@ -182,9 +185,9 @@ function QUBODrivers.sample(sampler::Optimizer{T}) where {T}
         "algorithm" => Dict{String,Any}("name" => "Super Sampler"),
         "backend"   => Dict{String,Any}("name" => "SuperBackend", "version" => nothing),
         "execution" => Dict{String,Any}("mode" => "sampling"),
-        "optimizer" => Dict{String,Any}("iterations" => nothing, "evaluations" => num_reads),
+        "optimizer" => Dict{String,Any}("iterations" => nothing, "evaluations" => final_reads),
         "reads"     => Dict{String,Any}(
-            "number_of_reads"       => num_reads,
+            "number_of_reads"       => final_reads,
             "final_number_of_reads" => final_reads,
         ),
         "seeds"     => Dict{String,Any}(),

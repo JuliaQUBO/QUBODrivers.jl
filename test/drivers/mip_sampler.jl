@@ -358,6 +358,15 @@ function _test_mip_sampler_optional_attribute_and_metadata_fallbacks()
         raw = MOI.get(model, MOI.RawSolver())
         metadata = QUBOTools.metadata(QUBOTools.solution(raw))
 
+        _assert_sampler_metadata_schema(
+            metadata;
+            algorithm_name        = "MIP Sampler",
+            execution_mode        = "mip_solve",
+            optimizer_evaluations = 1,
+            final_number_of_reads = 1,
+            status                = "OPTIMAL",
+            termination_status    = MOI.OPTIMAL,
+        )
         @test !("MOI.TimeLimitSec" in metadata["attributes"]["forwarded"])
         @test MIPSampler._backend_attribute(MOI.Utilities.Model{Float64}(), MOI.SolverName()) ===
               nothing

@@ -36,12 +36,6 @@ function _random_total_reads(model)
     )
 end
 
-function _random_solution_metadata(model)
-    raw = MOI.get(model, MOI.RawSolver())
-
-    return QUBOTools.metadata(QUBOTools.solution(raw))
-end
-
 function _test_random_sampler_final_number_of_reads_attribute()
     @testset "FinalNumberOfReads attribute" begin
         sampler = RandomSampler.Optimizer()
@@ -74,28 +68,37 @@ function _test_random_sampler_final_number_of_reads_sampling()
 
         MOI.optimize!(default_model)
 
-        default_metadata = _random_solution_metadata(default_model)
+        default_metadata = _solution_metadata(default_model)
 
         @test _random_total_reads(default_model) == 7
-        @test default_metadata["reads"]["number_of_reads"] == 7
-        @test default_metadata["reads"]["final_number_of_reads"] == 7
-        @test default_metadata["algorithm"]["name"] == "Random Sampler"
-        @test default_metadata["backend"]["name"] == "QUBODrivers.jl"
-        @test default_metadata["execution"]["mode"] == "random_sampling"
-        @test default_metadata["optimizer"]["evaluations"] == 7
-        @test haskey(default_metadata, "seeds")
-        @test default_metadata["termination_status"] == MOI.LOCALLY_SOLVED
+        _assert_sampler_metadata_schema(
+            default_metadata;
+            algorithm_name        = "Random Sampler",
+            execution_mode        = "random_sampling",
+            number_of_reads       = 7,
+            optimizer_evaluations = 7,
+            final_number_of_reads = 7,
+            status                = "locally_solved",
+            termination_status    = MOI.LOCALLY_SOLVED,
+        )
 
         override_model = _build_random_reads_model(; num_reads = 7, final_num_reads = 3)
 
         MOI.optimize!(override_model)
 
-        override_metadata = _random_solution_metadata(override_model)
+        override_metadata = _solution_metadata(override_model)
 
         @test _random_total_reads(override_model) == 3
-        @test override_metadata["reads"]["number_of_reads"] == 7
-        @test override_metadata["reads"]["final_number_of_reads"] == 3
-        @test override_metadata["optimizer"]["evaluations"] == 3
+        _assert_sampler_metadata_schema(
+            override_metadata;
+            algorithm_name        = "Random Sampler",
+            execution_mode        = "random_sampling",
+            number_of_reads       = 3,
+            optimizer_evaluations = 3,
+            final_number_of_reads = 3,
+            status                = "locally_solved",
+            termination_status    = MOI.LOCALLY_SOLVED,
+        )
     end
 
     return nothing

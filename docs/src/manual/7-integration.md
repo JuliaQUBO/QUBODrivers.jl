@@ -70,9 +70,9 @@ function QUBODrivers.sample(sampler::Optimizer{T}) where {T}
         "algorithm" => Dict{String,Any}("name" => "Demo Sampler"),
         "backend"   => Dict{String,Any}("name" => "Demo Sampler", "version" => v"0.1.0"),
         "execution" => Dict{String,Any}("mode" => "exhaustive_search"),
-        "optimizer" => Dict{String,Any}("iterations" => nothing, "evaluations" => num_reads),
+        "optimizer" => Dict{String,Any}("iterations" => nothing, "evaluations" => final_reads),
         "reads"     => Dict{String,Any}(
-            "number_of_reads"       => num_reads,
+            "number_of_reads"       => final_reads,
             "final_number_of_reads" => final_reads,
         ),
         "seeds"     => Dict{String,Any}(),

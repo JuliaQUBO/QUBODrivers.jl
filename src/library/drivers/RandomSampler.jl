@@ -18,8 +18,7 @@ states.
 
 ## Attributes
 - `RandomSeed`, `"seed"`: Random seed to initialize the random number generator.
-- `NumberOfReads`, `"num_reads"`: Internal read count and the default final
-  read count.
+- `NumberOfReads`, `"num_reads"`: Default final read count.
 - `QUBODrivers.FinalNumberOfReads`, `"final_num_reads"`: Number of random
   states emitted in the returned sample set. If unset, this defaults to
   `NumberOfReads`.
@@ -71,7 +70,7 @@ function QUBODrivers.sample(sampler::Optimizer{T}) where {T}
         algorithm_name        = "Random Sampler",
         execution_mode        = "random_sampling",
         optimizer_evaluations = final_num_reads,
-        number_of_reads       = num_reads,
+        number_of_reads       = final_num_reads,
         final_number_of_reads = final_num_reads,
         seeds                 = Dict{String,Any}("sampler" => seed),
         status                = "locally_solved",

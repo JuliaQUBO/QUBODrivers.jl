@@ -2,6 +2,7 @@ function test_setup_macro()
     @testset "□ @setup macro" verbose = true begin
         test_project_version()
         test_setup_spec_parser()
+        test_final_number_of_reads_fallbacks()
     end
 
     return nothing
@@ -16,6 +17,25 @@ function test_project_version()
         @test MOI.get(ExactSampler.Optimizer(), MOI.SolverVersion()) == version
         @test MOI.get(RandomSampler.Optimizer(), MOI.SolverVersion()) == version
         @test MOI.get(IdentitySampler.Optimizer(), MOI.SolverVersion()) == version
+    end
+
+    return nothing
+end
+
+struct NoRawAttributeSampler <: QUBODrivers.AbstractSampler{Float64} end
+
+struct ThrowingRawAttributeSampler <: QUBODrivers.AbstractSampler{Float64} end
+
+function MOI.get(::ThrowingRawAttributeSampler, ::QUBODrivers._RawFinalNumberOfReads)
+    error("raw final reads failure")
+end
+
+function test_final_number_of_reads_fallbacks()
+    @testset "→ FinalNumberOfReads fallbacks" begin
+        @test QUBODrivers.final_number_of_reads(NoRawAttributeSampler()) === nothing
+        @test_throws ErrorException QUBODrivers.final_number_of_reads(
+            ThrowingRawAttributeSampler(),
+        )
     end
 
     return nothing
