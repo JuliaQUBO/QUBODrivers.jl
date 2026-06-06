@@ -153,13 +153,23 @@ function _apply_post_sample_callback(
     return processed_sampleset, results.time
 end
 
+struct _PostSampleCallbackError <: Exception
+    error
+    backtrace
+end
+
+function Base.showerror(io::IO, err::_PostSampleCallbackError)
+    print(io, "PostSampleCallback failed: ")
+    showerror(io, err.error, err.backtrace)
+
+    return nothing
+end
+
 function _call_post_sample_callback(callback, sampleset, sampler)
     try
         return callback(sampleset, sampler)
     catch err
-        msg = sprint(showerror, err)
-
-        error("PostSampleCallback failed: $msg")
+        throw(_PostSampleCallbackError(err, catch_backtrace()))
     end
 end
 

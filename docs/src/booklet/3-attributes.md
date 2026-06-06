@@ -43,6 +43,8 @@ and the sampler context after raw sampling. Metadata-only annotations are
 allowed by default. To emit changed sample states, values, reads, sense, or
 domain, set `QUBODrivers.PostSampleTransform()` or raw
 `"post_sample_transform"` to `true` and return the transformed `SampleSet`.
+Replacement `SampleSet`s should carry over or intentionally rebuild raw
+backend metadata.
 Objective annotations should follow QUBOTools' `"objectives"` metadata
 convention, and reformulation-specific projection or repair data should come
 from ToQUBO/QUBOTools metadata rather than from QUBODrivers.

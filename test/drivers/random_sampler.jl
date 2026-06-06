@@ -125,6 +125,7 @@ function _test_random_sampler_final_number_of_reads_sampling()
         default_metadata = _solution_metadata(default_model)
 
         @test _random_total_reads(default_model) == 7
+        @test !haskey(default_metadata, "postprocess")
         _assert_sampler_metadata_schema(
             default_metadata;
             algorithm_name        = "Random Sampler",
@@ -252,7 +253,8 @@ function _test_random_sampler_post_sample_error()
         err = _optimize_error(model)
         msg = sprint(showerror, err)
 
-        @test err isa ErrorException
+        @test err isa QUBODrivers._PostSampleCallbackError
+        @test err.error isa ErrorException
         @test occursin("PostSampleCallback failed", msg)
         @test occursin("callback boom", msg)
     end

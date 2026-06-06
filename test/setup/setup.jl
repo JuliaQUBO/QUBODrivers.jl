@@ -4,6 +4,7 @@ function test_setup_macro()
         test_setup_spec_parser()
         test_final_number_of_reads_fallbacks()
         test_post_sample_attribute_defaults()
+        test_post_sample_callback_optimize_fallbacks()
     end
 
     return nothing
@@ -56,12 +57,55 @@ function test_post_sample_attribute_defaults()
     return nothing
 end
 
-struct NoRawAttributeSampler <: QUBODrivers.AbstractSampler{Float64} end
+mutable struct NoRawAttributeSampler <: QUBODrivers.AbstractSampler{Float64}
+    model::QUBOTools.Model{VI,Float64,Int}
 
-struct ThrowingRawAttributeSampler <: QUBODrivers.AbstractSampler{Float64} end
+    NoRawAttributeSampler() = new(QUBOTools.Model{VI,Float64,Int}())
+end
+
+mutable struct ThrowingRawAttributeSampler <: QUBODrivers.AbstractSampler{Float64}
+    model::QUBOTools.Model{VI,Float64,Int}
+
+    ThrowingRawAttributeSampler() = new(QUBOTools.Model{VI,Float64,Int}())
+end
+
+QUBOTools.backend(sampler::NoRawAttributeSampler) = sampler.model
+QUBOTools.backend(sampler::ThrowingRawAttributeSampler) = sampler.model
+
+function QUBODrivers.set_model!(
+    sampler::Union{NoRawAttributeSampler,ThrowingRawAttributeSampler},
+    model::QUBOTools.Model{VI,Float64,Int},
+)
+    sampler.model = model
+
+    return model
+end
+
+function _custom_sampleset()
+    metadata = QUBODrivers._sampler_metadata(
+        origin                = "Custom Sampler",
+        algorithm_name        = "Custom Sampler",
+        execution_mode        = "test",
+        optimizer_iterations  = 1,
+        optimizer_evaluations = 1,
+        number_of_reads       = 1,
+        final_number_of_reads = 1,
+        status                = "locally_solved",
+    )
+    samples = [QUBOTools.Sample{Float64,Int}([0], 0.0)]
+
+    return QUBOTools.SampleSet{Float64,Int}(samples, metadata; sense = :min, domain = :bool)
+end
+
+QUBODrivers.sample(::NoRawAttributeSampler) = _custom_sampleset()
+QUBODrivers.sample(::ThrowingRawAttributeSampler) = _custom_sampleset()
 
 function MOI.get(::ThrowingRawAttributeSampler, ::QUBODrivers._RawFinalNumberOfReads)
     error("raw final reads failure")
+end
+
+function MOI.get(::ThrowingRawAttributeSampler, ::QUBODrivers._RawPostSampleCallback)
+    error("raw post-sample callback failure")
 end
 
 function test_final_number_of_reads_fallbacks()
@@ -70,6 +114,35 @@ function test_final_number_of_reads_fallbacks()
         @test_throws ErrorException QUBODrivers.final_number_of_reads(
             ThrowingRawAttributeSampler(),
         )
+    end
+
+    return nothing
+end
+
+function test_post_sample_callback_optimize_fallbacks()
+    @testset "→ PostSampleCallback optimize fallbacks" begin
+        sampler = NoRawAttributeSampler()
+
+        MOI.optimize!(sampler)
+
+        metadata = QUBOTools.metadata(QUBOTools.solution(sampler))
+
+        @test QUBODrivers.post_sample_callback(sampler) === nothing
+        @test QUBODrivers.post_sample_transform(sampler) === false
+        @test !haskey(metadata, "postprocess")
+
+        throwing_sampler = ThrowingRawAttributeSampler()
+        err = try
+            MOI.optimize!(throwing_sampler)
+
+            nothing
+        catch err
+            err
+        end
+        msg = sprint(showerror, err)
+
+        @test err isa ErrorException
+        @test occursin("raw post-sample callback failure", msg)
     end
 
     return nothing

@@ -105,18 +105,21 @@ The callback receives a copy of the raw backend `SampleSet` and the sampler
 context. Metadata-only annotations are allowed by default. If the callback
 changes sample states, objective values, reads, sense, or domain, also set
 `QUBODrivers.PostSampleTransform()` or raw `"post_sample_transform"` to `true`
-and return the transformed `SampleSet`. When transformed samples are emitted,
-QUBODrivers records postprocess metadata and preserves the raw sample frame and
-records in the emitted solution metadata.
+and return the transformed `SampleSet`. Replacement `SampleSet`s should carry
+over or intentionally rebuild the original metadata; otherwise backend origin,
+status, reads, timing, and diagnostics metadata from the raw output are lost.
+When transformed samples are emitted, QUBODrivers records postprocess metadata
+and preserves the raw sample frame and records in the emitted solution metadata.
 
 Use this hook for driver-level sample annotation, objective bookkeeping, or
 controlled repair of emitted samples. For objective bookkeeping, prefer the
-QUBOTools convention `metadata(sampleset)["objectives"][label]`; recent
-QUBOTools versions provide `QUBOTools.annotate_objectives!` and
-`QUBOTools.verify_objective_values` helpers for this. Problem-specific repair
-algorithms and the reformulation metadata needed to implement them should live
-outside QUBODrivers. ToQUBO records reformulation metadata under
-`metadata(QUBOTools.backend(model))["toqubo"]["reformulation"]` and exposes
+QUBOTools convention `metadata(sampleset)["objectives"][label]`. If your
+QUBOTools version includes objective-bookkeeping helpers, prefer
+`QUBOTools.annotate_objectives!` and `QUBOTools.verify_objective_values` for
+this. Problem-specific repair algorithms and the reformulation metadata needed
+to implement them should live outside QUBODrivers. ToQUBO versions that expose
+reformulation metadata record it under
+`metadata(QUBOTools.backend(model))["toqubo"]["reformulation"]` and expose
 helpers such as `ToQUBO.project_original_state`; QUBODrivers only provides the
 sampler-interface hook.
 
