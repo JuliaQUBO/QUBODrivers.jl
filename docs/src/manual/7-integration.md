@@ -122,6 +122,9 @@ When adapting the example for a real sampler:
 - include useful metadata such as timing, backend status, and backend version;
 - leave generic post-sampling annotation or repair to
   `QUBODrivers.PostSampleCallback()` when users need a configurable hook;
+- use QUBOTools objective metadata and ToQUBO reformulation metadata for
+  objective bookkeeping, original-variable projection, and encoding-specific
+  auxiliary handling;
 - run `QUBODrivers.test(YourSampler.Optimizer)` in the package test suite.
 
 The built-in `RandomSampler` and `ExactSampler` implementations are compact

@@ -106,13 +106,19 @@ context. Metadata-only annotations are allowed by default. If the callback
 changes sample states, objective values, reads, sense, or domain, also set
 `QUBODrivers.PostSampleTransform()` or raw `"post_sample_transform"` to `true`
 and return the transformed `SampleSet`. When transformed samples are emitted,
-QUBODrivers records postprocess metadata and preserves the raw sample records in
-the emitted solution metadata.
+QUBODrivers records postprocess metadata and preserves the raw sample frame and
+records in the emitted solution metadata.
 
 Use this hook for driver-level sample annotation, objective bookkeeping, or
-controlled repair of emitted samples. Problem-specific repair algorithms and the
-reformulation metadata needed to implement them should live in QUBOTools or
-ToQUBO; QUBODrivers only provides the sampler-interface hook.
+controlled repair of emitted samples. For objective bookkeeping, prefer the
+QUBOTools convention `metadata(sampleset)["objectives"][label]`; recent
+QUBOTools versions provide `QUBOTools.annotate_objectives!` and
+`QUBOTools.verify_objective_values` helpers for this. Problem-specific repair
+algorithms and the reformulation metadata needed to implement them should live
+outside QUBODrivers. ToQUBO records reformulation metadata under
+`metadata(QUBOTools.backend(model))["toqubo"]["reformulation"]` and exposes
+helpers such as `ToQUBO.project_original_state`; QUBODrivers only provides the
+sampler-interface hook.
 
 ## The [`QUBODrivers.sample`](@ref) method
 
@@ -162,8 +168,9 @@ QUBODrivers recommends these top-level metadata keys for driver attributes:
 - `"status"` and `"termination_status"`: raw and structured termination status.
 
 When a post-sampling callback runs, QUBODrivers records callback metadata under
-`"postprocess" => "callback"`. If the callback transforms emitted samples, raw
-sample records are stored under `"postprocess" => "raw_samples"`.
+`"postprocess" => "callback"`. If the callback transforms emitted samples, the
+raw sample frame and records are stored under
+`"postprocess" => "raw_samples"`.
 
 ## A complete example
 

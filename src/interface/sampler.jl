@@ -231,7 +231,7 @@ function _record_post_sample_metadata!(
     )
 
     if !isnothing(raw_sampleset)
-        postprocess["raw_samples"] = _sample_records(raw_sampleset)
+        postprocess["raw_samples"] = _sampleset_record(raw_sampleset)
     end
 
     return nothing
@@ -253,6 +253,16 @@ function _post_sample_metadata(metadata::Dict{String,Any})
     metadata["postprocess"] = postprocess
 
     return postprocess
+end
+
+function _sampleset_record(sampleset::SampleSet)
+    return Dict{String,Any}(
+        "format"         => "QUBODrivers.raw_samples",
+        "schema_version" => 1,
+        "sense"          => String(QUBOTools.sense(sampleset)),
+        "domain"         => String(QUBOTools.domain(sampleset)),
+        "samples"        => _sample_records(sampleset),
+    )
 end
 
 function _sample_records(sampleset::SampleSet)

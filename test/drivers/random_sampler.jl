@@ -42,6 +42,22 @@ function _random_solution(model)
     return QUBOTools.solution(raw)
 end
 
+function _objective_rows(sampleset::SampleSet{T,U}; offset::T = zero(T)) where {T,U}
+    return [
+        Dict{String,Any}(
+            "rank"                  => i,
+            "state"                 => copy(QUBOTools.state(sample)),
+            "raw_value"             => QUBOTools.value(sample),
+            "scaled_value"          => QUBOTools.value(sample),
+            "offset_adjusted_value" => QUBOTools.value(sample) + offset,
+            "scale"                 => one(T),
+            "offset"                => offset,
+            "sense"                 => String(QUBOTools.sense(sampleset)),
+            "domain"                => String(QUBOTools.domain(sampleset)),
+        ) for (i, sample) in enumerate(sampleset)
+    ]
+end
+
 function _offset_sampleset_values(sampleset::SampleSet{T,U}, offset::T) where {T,U}
     samples = Sample{T,U}[
         Sample{T,U}(
@@ -51,7 +67,10 @@ function _offset_sampleset_values(sampleset::SampleSet{T,U}, offset::T) where {T
         ) for sample in sampleset
     ]
     metadata = QUBOTools.metadata(sampleset)
-    metadata["alternative_objective"] = Dict{String,Any}("offset" => offset)
+    objectives = get!(metadata, "objectives") do
+        Dict{String,Any}()
+    end
+    objectives["shifted"] = _objective_rows(sampleset; offset)
 
     return SampleSet{T,U}(
         samples;
@@ -147,6 +166,10 @@ function _test_random_sampler_post_sample_annotation()
                 "samples"   => length(sampleset),
                 "variables" => MOI.get(sampler, MOI.NumberOfVariables()),
             )
+            objectives = get!(QUBOTools.metadata(sampleset), "objectives") do
+                Dict{String,Any}()
+            end
+            objectives["callback"] = _objective_rows(sampleset)
 
             return nothing
         end
@@ -158,6 +181,8 @@ function _test_random_sampler_post_sample_annotation()
 
         @test metadata["annotation"]["samples"] == MOI.get(model, MOI.ResultCount())
         @test metadata["annotation"]["variables"] == 2
+        @test length(metadata["objectives"]["callback"]) == MOI.get(model, MOI.ResultCount())
+        @test haskey(first(metadata["objectives"]["callback"]), "offset_adjusted_value")
         @test metadata["postprocess"]["callback"]["transform"] === false
         @test metadata["postprocess"]["callback"]["transformed"] === false
         @test haskey(metadata["postprocess"]["callback"], "time")
@@ -178,9 +203,14 @@ function _test_random_sampler_post_sample_transform()
 
         solution = _random_solution(model)
         metadata = QUBOTools.metadata(solution)
-        raw_samples = metadata["postprocess"]["raw_samples"]
+        raw_sampleset = metadata["postprocess"]["raw_samples"]
+        raw_samples = raw_sampleset["samples"]
 
-        @test metadata["alternative_objective"]["offset"] == 10.0
+        @test metadata["objectives"]["shifted"][1]["offset"] == 10.0
+        @test raw_sampleset["format"] == "QUBODrivers.raw_samples"
+        @test raw_sampleset["schema_version"] == 1
+        @test raw_sampleset["sense"] == String(QUBOTools.sense(solution))
+        @test raw_sampleset["domain"] == String(QUBOTools.domain(solution))
         @test metadata["postprocess"]["callback"]["transform"] === true
         @test metadata["postprocess"]["callback"]["transformed"] === true
         @test length(raw_samples) == length(solution)
