@@ -25,6 +25,10 @@ QUBODrivers.@setup
 QUBODrivers.SamplerAttribute
 QUBODrivers.FinalNumberOfReads
 QUBODrivers.final_number_of_reads
+QUBODrivers.PostSampleCallback
+QUBODrivers.PostSampleTransform
+QUBODrivers.post_sample_callback
+QUBODrivers.post_sample_transform
 QUBODrivers.RawSamplerAttribute
 QUBODrivers.@raw_attr_str
 QUBODrivers.get_raw_attr

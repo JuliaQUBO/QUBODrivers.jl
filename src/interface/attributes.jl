@@ -27,9 +27,13 @@ RawSamplerAttribute(key::String) = RawSamplerAttribute{Symbol(key)}()
 
 const _NUMBER_OF_READS_RAW       = "num_reads"
 const _FINAL_NUMBER_OF_READS_RAW = "final_num_reads"
+const _POST_SAMPLE_CALLBACK_RAW  = "post_sample_callback"
+const _POST_SAMPLE_TRANSFORM_RAW = "post_sample_transform"
 
-const _RawNumberOfReads      = RawSamplerAttribute{Symbol(_NUMBER_OF_READS_RAW)}
-const _RawFinalNumberOfReads = RawSamplerAttribute{Symbol(_FINAL_NUMBER_OF_READS_RAW)}
+const _RawNumberOfReads       = RawSamplerAttribute{Symbol(_NUMBER_OF_READS_RAW)}
+const _RawFinalNumberOfReads  = RawSamplerAttribute{Symbol(_FINAL_NUMBER_OF_READS_RAW)}
+const _RawPostSampleCallback  = RawSamplerAttribute{Symbol(_POST_SAMPLE_CALLBACK_RAW)}
+const _RawPostSampleTransform = RawSamplerAttribute{Symbol(_POST_SAMPLE_TRANSFORM_RAW)}
 
 @doc raw"""
     FinalNumberOfReads()
@@ -47,6 +51,35 @@ Generated optimizers created by [`QUBODrivers.@setup`](@ref) support this
 attribute and the raw `"final_num_reads"` key.
 """
 struct FinalNumberOfReads <: SamplerAttribute end
+
+@doc raw"""
+    PostSampleCallback()
+
+Generic sampler optimizer attribute for a callback applied after backend
+sampling and before the final `SampleSet` is attached to the optimizer.
+
+The raw optimizer attribute key is `"post_sample_callback"`. The callback is
+called as `callback(sampleset, sampler)`, where `sampleset` is a copy of the raw
+backend output and `sampler` is the optimizer/model context. The callback may
+mutate the copied sample-set metadata and return `nothing`, or return a
+`SampleSet` to replace the emitted samples. Replacing or changing sample
+states, values, reads, sense, or domain requires [`PostSampleTransform`](@ref)
+to be set to `true`.
+"""
+struct PostSampleCallback <: SamplerAttribute end
+
+@doc raw"""
+    PostSampleTransform()
+
+Generic sampler optimizer attribute controlling whether
+[`PostSampleCallback`](@ref) may transform emitted samples.
+
+The raw optimizer attribute key is `"post_sample_transform"`, and the default
+value is `false`. When set to `true`, a post-sample callback may return a
+replacement `SampleSet`. QUBODrivers records callback metadata and preserves the
+raw samples in the emitted solution metadata.
+"""
+struct PostSampleTransform <: SamplerAttribute end
 
 @doc raw"""
     @raw_attr_str("key")
@@ -124,6 +157,42 @@ function final_number_of_reads(sampler::AbstractSampler)
     end
 end
 
+@doc raw"""
+    post_sample_callback(sampler)
+
+Return the configured post-sample callback for `sampler`, or `nothing` when no
+callback is configured or the sampler does not support the generic callback
+attribute.
+"""
+function post_sample_callback(sampler::AbstractSampler)
+    attr = _RawPostSampleCallback()
+
+    try
+        return MOI.get(sampler, attr)
+    catch err
+        _is_unavailable_raw_attr(err, attr) ? nothing : rethrow()
+    end
+end
+
+@doc raw"""
+    post_sample_transform(sampler)::Bool
+
+Return whether the configured post-sample callback may transform emitted sample
+states, values, reads, sense, or domain. Samplers that do not support the
+generic transform attribute default to `false`.
+"""
+function post_sample_transform(sampler::AbstractSampler)::Bool
+    attr = _RawPostSampleTransform()
+
+    transform = try
+        MOI.get(sampler, attr)
+    catch err
+        _is_unavailable_raw_attr(err, attr) ? false : rethrow()
+    end
+
+    return transform::Bool
+end
+
 function _is_unavailable_raw_attr(err, attr::RawSamplerAttribute)
     return err isa MOI.GetAttributeNotAllowed{typeof(attr)}
 end
@@ -151,5 +220,15 @@ function _validate_final_number_of_reads(value)
     return nothing
 end
 
+function _validate_post_sample_transform(value)
+    value isa Bool || error("Value for 'PostSampleTransform' must be a boolean")
+
+    return nothing
+end
+
 MOIU.map_indices(_, ::FinalNumberOfReads, value) = value
 MOIU.map_indices(_, ::_RawFinalNumberOfReads, value) = value
+MOIU.map_indices(_, ::PostSampleCallback, value) = value
+MOIU.map_indices(_, ::_RawPostSampleCallback, value) = value
+MOIU.map_indices(_, ::PostSampleTransform, value) = value
+MOIU.map_indices(_, ::_RawPostSampleTransform, value) = value

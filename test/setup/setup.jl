@@ -3,6 +3,7 @@ function test_setup_macro()
         test_project_version()
         test_setup_spec_parser()
         test_final_number_of_reads_fallbacks()
+        test_post_sample_attribute_defaults()
     end
 
     return nothing
@@ -17,6 +18,39 @@ function test_project_version()
         @test MOI.get(ExactSampler.Optimizer(), MOI.SolverVersion()) == version
         @test MOI.get(RandomSampler.Optimizer(), MOI.SolverVersion()) == version
         @test MOI.get(IdentitySampler.Optimizer(), MOI.SolverVersion()) == version
+    end
+
+    return nothing
+end
+
+function test_post_sample_attribute_defaults()
+    @testset "→ Post-sample callback attributes" begin
+        sampler = RandomSampler.Optimizer()
+        callback = (_, _) -> nothing
+
+        @test MOI.supports(sampler, QUBODrivers.PostSampleCallback())
+        @test MOI.supports(sampler, MOI.RawOptimizerAttribute("post_sample_callback"))
+        @test MOI.supports(sampler, QUBODrivers.PostSampleTransform())
+        @test MOI.supports(sampler, MOI.RawOptimizerAttribute("post_sample_transform"))
+        @test MOI.get(sampler, QUBODrivers.PostSampleCallback()) === nothing
+        @test MOI.get(sampler, MOI.RawOptimizerAttribute("post_sample_callback")) === nothing
+        @test MOI.get(sampler, QUBODrivers.PostSampleTransform()) === false
+        @test MOI.get(sampler, MOI.RawOptimizerAttribute("post_sample_transform")) === false
+        @test QUBODrivers.post_sample_callback(sampler) === nothing
+        @test QUBODrivers.post_sample_transform(sampler) === false
+
+        MOI.set(sampler, QUBODrivers.PostSampleCallback(), callback)
+        @test MOI.get(sampler, QUBODrivers.PostSampleCallback()) === callback
+
+        MOI.set(sampler, MOI.RawOptimizerAttribute("post_sample_transform"), true)
+        @test MOI.get(sampler, QUBODrivers.PostSampleTransform()) === true
+        @test QUBODrivers.post_sample_transform(sampler) === true
+
+        @test_throws ErrorException MOI.set(
+            sampler,
+            QUBODrivers.PostSampleTransform(),
+            "true",
+        )
     end
 
     return nothing

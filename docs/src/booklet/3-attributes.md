@@ -6,6 +6,10 @@
 QUBODrivers.SamplerAttribute
 QUBODrivers.FinalNumberOfReads
 QUBODrivers.final_number_of_reads
+QUBODrivers.PostSampleCallback
+QUBODrivers.PostSampleTransform
+QUBODrivers.post_sample_callback
+QUBODrivers.post_sample_transform
 ```
 
 ```@docs
@@ -32,6 +36,13 @@ that attribute.
 
 Built-in samplers that do not have a separate final sampling phase document the
 attribute as ignored and report their fixed returned read count in metadata.
+
+Generated optimizers also support `QUBODrivers.PostSampleCallback()` and the
+raw key `"post_sample_callback"`. The callback receives a copied `SampleSet`
+and the sampler context after raw sampling. Metadata-only annotations are
+allowed by default. To emit changed sample states, values, reads, sense, or
+domain, set `QUBODrivers.PostSampleTransform()` or raw
+`"post_sample_transform"` to `true` and return the transformed `SampleSet`.
 
 ## An advanced example
 

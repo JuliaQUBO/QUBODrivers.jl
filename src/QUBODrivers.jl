@@ -49,6 +49,7 @@ include("library/setup/quote.jl")
 include("library/setup/macro.jl")
 
 export AbstractSampler, FinalNumberOfReads, final_number_of_reads
+export PostSampleCallback, PostSampleTransform, post_sample_callback, post_sample_transform
 export ExactSampler, IdentitySampler, MIPSampler, RandomSampler
 
 include("library/drivers/ExactSampler.jl")

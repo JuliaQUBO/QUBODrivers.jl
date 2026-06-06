@@ -85,6 +85,35 @@ evaluations. `"final_num_reads"` controls the reads used to build the returned
 `QUBODrivers.final_number_of_reads(sampler)` to get the effective value; it
 defaults to `"num_reads"` when that attribute is supported.
 
+Generated optimizers also support a generic post-sampling hook through
+`QUBODrivers.PostSampleCallback()` and the raw key
+`"post_sample_callback"`. The callback is called after
+[`QUBODrivers.sample`](@ref) returns and before the final `SampleSet` is
+attached:
+
+```julia
+callback = function (sampleset, sampler)
+    QUBOTools.metadata(sampleset)["postprocess_note"] = "annotated"
+
+    return nothing
+end
+
+MOI.set(sampler, QUBODrivers.PostSampleCallback(), callback)
+```
+
+The callback receives a copy of the raw backend `SampleSet` and the sampler
+context. Metadata-only annotations are allowed by default. If the callback
+changes sample states, objective values, reads, sense, or domain, also set
+`QUBODrivers.PostSampleTransform()` or raw `"post_sample_transform"` to `true`
+and return the transformed `SampleSet`. When transformed samples are emitted,
+QUBODrivers records postprocess metadata and preserves the raw sample records in
+the emitted solution metadata.
+
+Use this hook for driver-level sample annotation, objective bookkeeping, or
+controlled repair of emitted samples. Problem-specific repair algorithms and the
+reformulation metadata needed to implement them should live in QUBOTools or
+ToQUBO; QUBODrivers only provides the sampler-interface hook.
+
 ## The [`QUBODrivers.sample`](@ref) method
 
 ```@docs
@@ -131,6 +160,10 @@ QUBODrivers recommends these top-level metadata keys for driver attributes:
   internal phase, both values may be the same;
 - `"seeds"`: dictionary of sampler, model, optimizer, or backend seeds;
 - `"status"` and `"termination_status"`: raw and structured termination status.
+
+When a post-sampling callback runs, QUBODrivers records callback metadata under
+`"postprocess" => "callback"`. If the callback transforms emitted samples, raw
+sample records are stored under `"postprocess" => "raw_samples"`.
 
 ## A complete example
 
