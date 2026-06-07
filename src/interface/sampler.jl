@@ -100,6 +100,9 @@ function _sample!(sampler::AbstractSampler{T}) where {T}
 end
 
 function _sample!(sampler::AbstractSampler{T}, sampleset::SampleSet{T}, total_time::Float64) where {T}
+    sampleset, post_sample_time = _apply_post_sample_callback(sampler, sampleset)
+    total_time += post_sample_time
+
     metadata = QUBOTools.metadata(sampleset)::Dict{String,Any}
 
     if !haskey(metadata, "time")
@@ -115,4 +118,170 @@ function _sample!(sampler::AbstractSampler{T}, sampleset::SampleSet{T}, total_ti
     QUBOTools.attach!(sampler, sampleset)
 
     return nothing
+end
+
+function _apply_post_sample_callback(
+    sampler::AbstractSampler{T},
+    sampleset::SampleSet{T},
+) where {T}
+    callback = post_sample_callback(sampler)
+
+    isnothing(callback) && return sampleset, 0.0
+
+    transform = post_sample_transform(sampler)
+    working_sampleset = _copy_sampleset(sampleset)
+    results = @timed _call_post_sample_callback(callback, working_sampleset, sampler)
+    processed_sampleset = _post_sample_result(results.value, working_sampleset)
+    transformed = !_same_samples(sampleset, processed_sampleset)
+
+    if transformed && !transform
+        error(
+            "PostSampleCallback changed sample states, values, reads, sense, or domain, " *
+            "but PostSampleTransform is false",
+        )
+    end
+
+    _record_post_sample_metadata!(
+        processed_sampleset,
+        callback;
+        transform,
+        transformed,
+        time = results.time,
+        raw_sampleset = transformed ? sampleset : nothing,
+    )
+
+    return processed_sampleset, results.time
+end
+
+struct _PostSampleCallbackError <: Exception
+    error
+    backtrace
+end
+
+function Base.showerror(io::IO, err::_PostSampleCallbackError)
+    print(io, "PostSampleCallback failed: ")
+    showerror(io, err.error, err.backtrace)
+
+    return nothing
+end
+
+function _call_post_sample_callback(callback, sampleset, sampler)
+    try
+        return callback(sampleset, sampler)
+    catch err
+        throw(_PostSampleCallbackError(err, catch_backtrace()))
+    end
+end
+
+function _post_sample_result(result, fallback::SampleSet{T,U}) where {T,U}
+    if isnothing(result)
+        return fallback
+    elseif result isa SampleSet{T,U}
+        return result
+    elseif result isa SampleSet
+        error(
+            "PostSampleCallback returned '$(typeof(result))', expected " *
+            "'SampleSet{$T,$U}'",
+        )
+    else
+        error(
+            "PostSampleCallback returned '$(typeof(result))', expected " *
+            "'nothing' or 'SampleSet{$T,$U}'",
+        )
+    end
+end
+
+function _copy_sampleset(sampleset::SampleSet{T,U}) where {T,U}
+    samples = [
+        Sample{T,U}(
+            copy(QUBOTools.state(sample)),
+            QUBOTools.value(sample),
+            QUBOTools.reads(sample),
+        ) for sample in sampleset
+    ]
+
+    return SampleSet{T,U}(
+        samples;
+        metadata = deepcopy(QUBOTools.metadata(sampleset)),
+        sense    = QUBOTools.sense(sampleset),
+        domain   = QUBOTools.domain(sampleset),
+    )
+end
+
+function _same_samples(left::SampleSet, right::SampleSet)
+    QUBOTools.sense(left) === QUBOTools.sense(right) || return false
+    QUBOTools.domain(left) === QUBOTools.domain(right) || return false
+    length(left) == length(right) || return false
+
+    for (left_sample, right_sample) in zip(left, right)
+        QUBOTools.state(left_sample) == QUBOTools.state(right_sample) || return false
+        QUBOTools.value(left_sample) == QUBOTools.value(right_sample) || return false
+        QUBOTools.reads(left_sample) == QUBOTools.reads(right_sample) || return false
+    end
+
+    return true
+end
+
+function _record_post_sample_metadata!(
+    sampleset::SampleSet,
+    callback;
+    transform::Bool,
+    transformed::Bool,
+    time::Float64,
+    raw_sampleset::Union{SampleSet,Nothing},
+)
+    metadata = QUBOTools.metadata(sampleset)::Dict{String,Any}
+    postprocess = _post_sample_metadata(metadata)
+
+    postprocess["callback"] = Dict{String,Any}(
+        "type"        => string(typeof(callback)),
+        "transform"   => transform,
+        "transformed" => transformed,
+        "time"        => time,
+    )
+
+    if !isnothing(raw_sampleset)
+        postprocess["raw_samples"] = _sampleset_record(raw_sampleset)
+    end
+
+    return nothing
+end
+
+function _post_sample_metadata(metadata::Dict{String,Any})
+    current = get(metadata, "postprocess", nothing)
+
+    postprocess = if current isa Dict{String,Any}
+        current
+    elseif current isa AbstractDict
+        Dict{String,Any}(string(key) => value for (key, value) in current)
+    elseif isnothing(current)
+        Dict{String,Any}()
+    else
+        Dict{String,Any}("user" => current)
+    end
+
+    metadata["postprocess"] = postprocess
+
+    return postprocess
+end
+
+function _sampleset_record(sampleset::SampleSet)
+    return Dict{String,Any}(
+        "format"         => "QUBODrivers.raw_samples",
+        "schema_version" => 1,
+        "sense"          => String(QUBOTools.sense(sampleset)),
+        "domain"         => String(QUBOTools.domain(sampleset)),
+        "samples"        => _sample_records(sampleset),
+    )
+end
+
+function _sample_records(sampleset::SampleSet)
+    return [
+        Dict{String,Any}(
+            "rank"  => i,
+            "state" => copy(QUBOTools.state(sample)),
+            "value" => QUBOTools.value(sample),
+            "reads" => QUBOTools.reads(sample),
+        ) for (i, sample) in enumerate(sampleset)
+    ]
 end

@@ -297,6 +297,59 @@ function __setup_quote_qubodrivers_attrs(spec::_SamplerSpec)
             ::$(Optimizer),
             ::Union{QUBODrivers.FinalNumberOfReads,QUBODrivers._RawFinalNumberOfReads},
         ) = true
+
+        # QUBODrivers.PostSampleCallback - get
+        function MOI.get(sampler::$(Optimizer), ::QUBODrivers.PostSampleCallback)
+            return QUBODrivers.post_sample_callback(sampler)
+        end
+
+        QUBODrivers.default_raw_attr(
+            ::$(Optimizer),
+            ::QUBODrivers._RawPostSampleCallback,
+        ) = nothing
+
+        # QUBODrivers.PostSampleCallback - set
+        function MOI.set(sampler::$(Optimizer), ::QUBODrivers.PostSampleCallback, value)
+            return MOI.set(sampler, QUBODrivers._RawPostSampleCallback(), value)
+        end
+
+        # QUBODrivers.PostSampleCallback - support
+        MOI.supports(
+            ::$(Optimizer),
+            ::Union{QUBODrivers.PostSampleCallback,QUBODrivers._RawPostSampleCallback},
+        ) = true
+
+        # QUBODrivers.PostSampleTransform - get
+        function MOI.get(sampler::$(Optimizer), ::QUBODrivers.PostSampleTransform)
+            return QUBODrivers.post_sample_transform(sampler)
+        end
+
+        QUBODrivers.default_raw_attr(
+            ::$(Optimizer),
+            ::QUBODrivers._RawPostSampleTransform,
+        ) = false
+
+        # QUBODrivers.PostSampleTransform - set
+        function MOI.set(sampler::$(Optimizer), ::QUBODrivers.PostSampleTransform, value)
+            return MOI.set(sampler, QUBODrivers._RawPostSampleTransform(), value)
+        end
+
+        function MOI.set(
+            sampler::$(Optimizer),
+            attr::QUBODrivers._RawPostSampleTransform,
+            value,
+        )
+            QUBODrivers._validate_post_sample_transform(value)
+            QUBODrivers.set_raw_attr!(sampler, attr, value)
+
+            return nothing
+        end
+
+        # QUBODrivers.PostSampleTransform - support
+        MOI.supports(
+            ::$(Optimizer),
+            ::Union{QUBODrivers.PostSampleTransform,QUBODrivers._RawPostSampleTransform},
+        ) = true
     end
 end
 

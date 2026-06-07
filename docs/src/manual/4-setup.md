@@ -85,6 +85,44 @@ evaluations. `"final_num_reads"` controls the reads used to build the returned
 `QUBODrivers.final_number_of_reads(sampler)` to get the effective value; it
 defaults to `"num_reads"` when that attribute is supported.
 
+Generated optimizers also support a generic post-sampling hook through
+`QUBODrivers.PostSampleCallback()` and the raw key
+`"post_sample_callback"`. The callback is called after
+[`QUBODrivers.sample`](@ref) returns and before the final `SampleSet` is
+attached:
+
+```julia
+callback = function (sampleset, sampler)
+    QUBOTools.metadata(sampleset)["postprocess_note"] = "annotated"
+
+    return nothing
+end
+
+MOI.set(sampler, QUBODrivers.PostSampleCallback(), callback)
+```
+
+The callback receives a copy of the raw backend `SampleSet` and the sampler
+context. Metadata-only annotations are allowed by default. If the callback
+changes sample states, objective values, reads, sense, or domain, also set
+`QUBODrivers.PostSampleTransform()` or raw `"post_sample_transform"` to `true`
+and return the transformed `SampleSet`. Replacement `SampleSet`s should carry
+over or intentionally rebuild the original metadata; otherwise backend origin,
+status, reads, timing, and diagnostics metadata from the raw output are lost.
+When transformed samples are emitted, QUBODrivers records postprocess metadata
+and preserves the raw sample frame and records in the emitted solution metadata.
+
+Use this hook for driver-level sample annotation, objective bookkeeping, or
+controlled repair of emitted samples. For objective bookkeeping, prefer the
+QUBOTools convention `metadata(sampleset)["objectives"][label]`. If your
+QUBOTools version includes objective-bookkeeping helpers, prefer
+`QUBOTools.annotate_objectives!` and `QUBOTools.verify_objective_values` for
+this. Problem-specific repair algorithms and the reformulation metadata needed
+to implement them should live outside QUBODrivers. ToQUBO versions that expose
+reformulation metadata record it under
+`metadata(QUBOTools.backend(model))["toqubo"]["reformulation"]` and expose
+helpers such as `ToQUBO.project_original_state`; QUBODrivers only provides the
+sampler-interface hook.
+
 ## The [`QUBODrivers.sample`](@ref) method
 
 ```@docs
@@ -131,6 +169,11 @@ QUBODrivers recommends these top-level metadata keys for driver attributes:
   internal phase, both values may be the same;
 - `"seeds"`: dictionary of sampler, model, optimizer, or backend seeds;
 - `"status"` and `"termination_status"`: raw and structured termination status.
+
+When a post-sampling callback runs, QUBODrivers records callback metadata under
+`"postprocess" => "callback"`. If the callback transforms emitted samples, the
+raw sample frame and records are stored under
+`"postprocess" => "raw_samples"`.
 
 ## A complete example
 
