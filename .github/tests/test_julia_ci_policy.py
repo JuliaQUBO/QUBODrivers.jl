@@ -8,7 +8,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 
 MINIMUM_JULIA_VERSION = "1.10"
 LATEST_STABLE_JULIA_VERSION = "1"
-QUBOTOOLS_COMPAT_VERSION = "0.12"
+QUBOTOOLS_CURRENT_COMPAT_VERSION = "0.13"
 SUPPORTED_CI_RUNNERS = {"ubuntu-latest", "windows-2025-vs2026"}
 DEPRECATED_WORKFLOW_REFERENCES = (
     "actions/checkout@v4",
@@ -37,14 +37,19 @@ class JuliaCiPolicyTests(unittest.TestCase):
 
         self.assertEqual(compat["julia"], MINIMUM_JULIA_VERSION)
         self.assertIn(
-            QUBOTOOLS_COMPAT_VERSION,
+            QUBOTOOLS_CURRENT_COMPAT_VERSION,
             [entry.strip() for entry in compat["QUBOTools"].split(",")],
         )
 
     def test_docs_compat_exercises_current_qubotools_minor(self) -> None:
-        compat = self.load_toml("docs/Project.toml")["compat"]
+        package_compat = self.load_toml("Project.toml")["compat"]
+        docs_compat = self.load_toml("docs/Project.toml")["compat"]
 
-        self.assertEqual(compat["QUBOTools"], QUBOTOOLS_COMPAT_VERSION)
+        self.assertEqual(docs_compat["QUBOTools"], package_compat["QUBOTools"])
+        self.assertIn(
+            QUBOTOOLS_CURRENT_COMPAT_VERSION,
+            [entry.strip() for entry in docs_compat["QUBOTools"].split(",")],
+        )
 
     def test_ci_matrix_covers_floor_and_latest_stable(self) -> None:
         workflow = self.load_yaml(".github/workflows/ci.yml")
