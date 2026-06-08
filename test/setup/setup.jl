@@ -1,6 +1,7 @@
 function test_setup_macro()
     @testset "□ @setup macro" verbose = true begin
         test_project_version()
+        test_project_compat()
         test_setup_spec_parser()
         test_final_number_of_reads_fallbacks()
         test_post_sample_attribute_defaults()
@@ -19,6 +20,28 @@ function test_project_version()
         @test MOI.get(ExactSampler.Optimizer(), MOI.SolverVersion()) == version
         @test MOI.get(RandomSampler.Optimizer(), MOI.SolverVersion()) == version
         @test MOI.get(IdentitySampler.Optimizer(), MOI.SolverVersion()) == version
+    end
+
+    return nothing
+end
+
+function test_project_compat()
+    @testset "→ Project compat" begin
+        project_dir = QUBODrivers.__project__()
+        root_project = QUBODrivers.TOML.parsefile(joinpath(project_dir, "Project.toml"))
+        test_project = QUBODrivers.TOML.parsefile(joinpath(project_dir, "test", "Project.toml"))
+        docs_project = QUBODrivers.TOML.parsefile(joinpath(project_dir, "docs", "Project.toml"))
+        version = VersionNumber(root_project["version"])
+        root_compat = root_project["compat"]
+        test_compat = test_project["compat"]
+        docs_compat = docs_project["compat"]
+
+        @test docs_compat["MathOptInterface"] == root_compat["MathOptInterface"]
+        @test docs_compat["QUBOTools"] == root_compat["QUBOTools"]
+        @test test_compat["PythonCall"] == root_compat["PythonCall"]
+        @test docs_compat["QUBODrivers"] == "$(version.major).$(version.minor)"
+        @test !haskey(root_project["deps"], "ToQUBO")
+        @test !haskey(root_compat, "ToQUBO")
     end
 
     return nothing

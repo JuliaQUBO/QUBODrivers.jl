@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+## v0.6.0 - 2026-06-08
+
+### Breaking changes
+
+- No intentional behavior-breaking changes are included. This is a pre-1.0
+  minor release because final-read semantics, sampler metadata conventions, and
+  post-sampling callback hooks are part of the public driver-interface API.
+
+### Added / Changed / Maintenance
+
+- Add `QUBODrivers.FinalNumberOfReads()` and the raw `"final_num_reads"`
+  attribute so wrappers can distinguish backend search reads from the number of
+  reads returned in the final `SampleSet`.
+- Standardize sampler metadata conventions for algorithm, backend, execution,
+  optimizer, read counts, seeds, raw status, and structured termination status.
+- Add `QUBODrivers.PostSampleCallback()` and
+  `QUBODrivers.PostSampleTransform()` for metadata-only post-processing and
+  explicit sample transformations, including raw-sample preservation when a
+  transform is emitted.
+- Document the QUBODrivers/QUBOTools/ToQUBO boundary for objective
+  bookkeeping, reformulation metadata, original-variable projection, and repair.
+- Allow QUBOTools 0.13 while retaining QUBOTools 0.10, 0.11, and 0.12
+  compatibility.
+
 ## v0.5.1 - 2026-06-03
 
 - Add Dependabot dependency maintenance for Julia environments and GitHub
