@@ -129,3 +129,103 @@ When adapting the example for a real sampler:
 
 The built-in `RandomSampler` and `ExactSampler` implementations are compact
 references for these same steps.
+
+## Package a sampler interface
+
+Once the sampler module works, package it like a normal Julia interface package.
+The smallest useful repository usually has `src/`, `test/`, `Project.toml`, and
+GitHub automation for tests and releases. Prefer this checklist over a generated
+template: QUBODrivers interfaces vary from single-file wrappers to multi-module
+hardware clients and Python-backed packages.
+
+Use
+[`src/library/drivers/ExactSampler.jl`](https://github.com/JuliaQUBO/QUBODrivers.jl/blob/main/src/library/drivers/ExactSampler.jl)
+as the canonical copy-from skeleton for the optimizer declaration, the
+`QUBODrivers.sample` method, and metadata shape. Then compare against real
+interfaces such as [DWave.jl](https://github.com/JuliaQUBO/DWave.jl) and
+[JuliQAOAOpt.jl](https://github.com/SECQUOIA/JuliQAOAOpt.jl) for package
+layouts that include external backends.
+
+### `Project.toml`
+
+A standalone interface package should depend on QUBODrivers, QUBOTools, and
+MathOptInterface. Add backend-specific dependencies only when the sampler calls
+them directly.
+
+```toml
+name = "MySampler"
+uuid = "00000000-0000-0000-0000-000000000000"
+authors = ["Your Name <you@example.com>"]
+version = "0.1.0"
+
+[deps]
+MathOptInterface = "b8f27783-ece8-5eb3-8dc8-9495eed66fee"
+QUBODrivers = "a3f166f7-2cd3-47b6-9e1e-6fbfe0449eb0"
+QUBOTools = "60eb5b62-0a39-4ddc-84c5-97d2adff9319"
+
+[compat]
+MathOptInterface = "1"
+QUBODrivers = "0.6"
+QUBOTools = "0.10, 0.11, 0.12, 0.13"
+julia = "1.10"
+```
+
+Keep `[compat]` bounds explicit. They define what users and CI can install, and
+they are also what registry review checks before accepting a release.
+
+### Tests
+
+Put the public interface checks in `test/runtests.jl`. The `QUBODrivers.test`
+extension loads when both `QUBODrivers` and Julia's `Test` standard library are
+available.
+
+```julia
+using Test
+using MySampler
+using QUBODrivers
+
+@testset "MySampler" begin
+    QUBODrivers.test(MySampler.Optimizer)
+end
+```
+
+For samplers that need deterministic options or credentials-free operation, pass
+a setup function or disable example problems as shown in [Test Suite](@ref).
+Keep backend integration tests separate when they require secrets, paid hardware,
+or long runtimes.
+
+### Continuous integration and maintenance
+
+Use CI to exercise the package on the Julia versions in `[compat]`. A typical
+GitHub Actions workflow checks out the repository, installs Julia with
+`julia-actions/setup-julia`, enables `julia-actions/cache`, runs
+`julia-actions/julia-buildpkg`, and runs `julia-actions/julia-runtest`.
+
+Add Dependabot for the package environments that exist in the repository. Common
+entries are:
+
+- the root Julia package environment at `/`;
+- `/docs` if the package builds Documenter docs;
+- `/test` if tests use a separate test environment;
+- GitHub Actions updates at `/`.
+
+If the package is registered and should publish Git tags automatically, add
+TagBot with `JuliaRegistries/TagBot`. Registration is optional for sampler
+interfaces, and TagBot is only useful once releases are driven by registry
+events.
+
+### Installation and registration
+
+Unregistered sampler packages can be installed directly from their repository
+URL. This is the default fallback path while an interface is private,
+experimental, or too specialized for registration.
+
+```julia
+import Pkg
+Pkg.add(url = "https://github.com/Owner/MySampler.jl")
+```
+
+When the package is stable enough for wider use, register it with Julia's
+General registry using Registrator. Before registering, confirm the package has
+a unique UUID, an incremented `version`, explicit `[compat]` bounds, passing CI,
+and documentation that points users back to this QUBODrivers interface guide.

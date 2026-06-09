@@ -75,6 +75,14 @@ for i = 1:result_count(model)
 end
 ```
 
+## Build your own driver
+
+Sampler authors should start with the
+[Implementing a Sampler](docs/src/manual/7-integration.md) tutorial for the
+`@setup` and `sample` interface, packaging checklist, and reference
+implementations. Use the [Test Suite](docs/src/manual/5-tests.md) page to wire
+`QUBODrivers.test` into your package tests.
+
 ## List of [QUBODrivers.jl](https://github.com/JuliaQUBO/QUBODrivers.jl)-powered packages
 
 | Package                                                           |  Solvers                                         |
