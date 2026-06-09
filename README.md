@@ -78,10 +78,11 @@ end
 ## Build your own driver
 
 Sampler authors should start with the
-[Implementing a Sampler](docs/src/manual/7-integration.md) tutorial for the
-`@setup` and `sample` interface, packaging checklist, and reference
-implementations. Use the [Test Suite](docs/src/manual/5-tests.md) page to wire
-`QUBODrivers.test` into your package tests.
+[Implementing a Sampler](https://JuliaQUBO.github.io/QUBODrivers.jl/dev/manual/7-integration/)
+tutorial for the `@setup` and `sample` interface, packaging checklist, and
+reference implementations. Use the
+[Test Suite](https://JuliaQUBO.github.io/QUBODrivers.jl/dev/manual/5-tests/)
+page to wire `QUBODrivers.test` into your package tests.
 
 ## List of [QUBODrivers.jl](https://github.com/JuliaQUBO/QUBODrivers.jl)-powered packages
 

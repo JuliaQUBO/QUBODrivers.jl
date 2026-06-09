@@ -173,6 +173,9 @@ julia = "1.10"
 Keep `[compat]` bounds explicit. They define what users and CI can install, and
 they are also what registry review checks before accepting a release.
 
+Replace the placeholder `uuid` with a real value generated in Julia, for
+example `using UUIDs; uuid4()`.
+
 ### Tests
 
 Put the public interface checks in `test/runtests.jl`. The `QUBODrivers.test`
