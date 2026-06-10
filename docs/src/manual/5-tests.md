@@ -46,6 +46,31 @@ checks:
 QUBODrivers.test(MySampler.Optimizer; examples = false)
 ```
 
+Benchmark conformance checks are also enabled by default. They exercise a tiny
+three-variable model and verify that benchmark-facing metadata, timing, reads,
+seed, time-limit, and termination-status behavior matches QUBODrivers' public
+schema and traits.
+
+Disable the full conformance group for drivers that are not benchmark-ready yet:
+
+```julia
+QUBODrivers.test(MySampler.Optimizer; benchmark_conformance = false)
+```
+
+You can also disable individual groups:
+
+```julia
+QUBODrivers.test(
+    MySampler.Optimizer;
+    metadata_conformance = false,
+    timing_sanity = false,
+    determinism = false,
+    reads_semantics = false,
+    time_limit_acceptance = false,
+    termination_status = false,
+)
+```
+
 ## What the Suite Expects
 
 A sampler should:
@@ -57,6 +82,26 @@ A sampler should:
 - return at least one result for solvable test models;
 - expose result count, objective values, variable primals, solve time, and
   status through standard MOI attributes.
+- return benchmark-ready metadata accepted by
+  `QUBODrivers.validate_metadata`;
+- stamp positive `metadata["time"]["total"]` and
+  `metadata["time"]["effective"]`, with effective time no larger than total
+  time;
+- accept `QUBODrivers.FinalNumberOfReads()` and either honor it for the final
+  emitted `SampleSet` length or report `honors_final_reads(optimizer) == false`;
+- accept `MOI.TimeLimitSec()` without error, and keep total time within a
+  generous smoke-test slack if `enforces_time_limit(optimizer)` is true;
+- return a termination status in `OPTIMAL`, `LOCALLY_SOLVED`, `TIME_LIMIT`,
+  `ITERATION_LIMIT`, or `OTHER_LIMIT`;
+- produce identical sample states and values for repeated same-seed runs when
+  `supports_seed(optimizer)` is true.
+
+The benchmark conformance assertions are intentionally limited to the metadata
+schema documented on the [Metadata Schema](@ref) page and the public capability
+traits, including [`QUBODrivers.validate_metadata`](@ref),
+[`QUBODrivers.supports_seed`](@ref),
+[`QUBODrivers.honors_final_reads`](@ref), and
+[`QUBODrivers.enforces_time_limit`](@ref).
 
 ```@docs
 QUBODrivers.test
