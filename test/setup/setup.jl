@@ -55,20 +55,30 @@ function test_random_seed_attribute_defaults()
 
         @test QUBODrivers.supports_seed(sampler)
         @test QUBODrivers.supports_seed(RandomSampler.Optimizer)
+        @test isdefined(RandomSampler, :RandomSeed)
         @test MOI.supports(sampler, QUBODrivers.RandomSeed())
+        @test MOI.supports(sampler, RandomSampler.RandomSeed())
         @test MOI.supports(sampler, MOI.RawOptimizerAttribute("seed"))
         @test MOI.get(sampler, QUBODrivers.RandomSeed()) === nothing
+        @test MOI.get(sampler, RandomSampler.RandomSeed()) === nothing
         @test QUBODrivers.random_seed(sampler) === nothing
+
+        MOI.set(sampler, RandomSampler.RandomSeed(), 13)
+        @test MOI.get(sampler, RandomSampler.RandomSeed()) == 13
+        @test MOI.get(sampler, QUBODrivers.RandomSeed()) == 13
 
         MOI.set(sampler, QUBODrivers.RandomSeed(), 11)
         @test MOI.get(sampler, QUBODrivers.RandomSeed()) == 11
+        @test MOI.get(sampler, RandomSampler.RandomSeed()) == 11
         @test MOI.get(sampler, MOI.RawOptimizerAttribute("seed")) == 11
         @test QUBODrivers.random_seed(sampler) == 11
 
         MOI.set(sampler, MOI.RawOptimizerAttribute("seed"), nothing)
         @test MOI.get(sampler, QUBODrivers.RandomSeed()) === nothing
+        @test MOI.get(sampler, RandomSampler.RandomSeed()) === nothing
 
         @test_throws ErrorException MOI.set(sampler, QUBODrivers.RandomSeed(), -1)
+        @test_throws ErrorException MOI.set(sampler, RandomSampler.RandomSeed(), -1)
         @test_throws ErrorException MOI.set(sampler, MOI.RawOptimizerAttribute("seed"), -1)
 
         exact_sampler = ExactSampler.Optimizer()

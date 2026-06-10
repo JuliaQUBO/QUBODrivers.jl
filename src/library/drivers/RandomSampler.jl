@@ -29,7 +29,7 @@ QUBODrivers.@setup Optimizer begin
     name       = "Random Sampler"
     version    = QUBODrivers.__version__()
     attributes = begin
-        "seed"::Union{Integer,Nothing}             = nothing
+        RandomSeed["seed"]::Union{Integer,Nothing} = nothing
         NumberOfReads["num_reads"]::Integer        = 1_000
         RandomGenerator["rng"]::AbstractRNG        = Random.GLOBAL_RNG
     end
