@@ -85,6 +85,21 @@ evaluations. `"final_num_reads"` controls the reads used to build the returned
 `QUBODrivers.final_number_of_reads(sampler)` to get the effective value; it
 defaults to `"num_reads"` when that attribute is supported.
 
+Declare raw `"seed"` to opt into the standard `QUBODrivers.RandomSeed()`
+attribute:
+
+```julia
+QUBODrivers.@setup Optimizer begin
+    name = "Seeded Sampler"
+    attributes = begin
+        "seed"::Union{Integer,Nothing} = nothing
+    end
+end
+```
+
+When a seed is configured, QUBODrivers records it under
+`metadata["seeds"]["sampler"]` after sampling.
+
 Generated optimizers also support a generic post-sampling hook through
 `QUBODrivers.PostSampleCallback()` and the raw key
 `"post_sample_callback"`. The callback is called after
@@ -154,10 +169,13 @@ The `sense` keyword (`:min` or `:max`) and `domain` (`:bool` or `:spin`) tell QU
 The metadata dictionary is the place to record backend status, timing, and
 diagnostics. QUBODrivers will add a total time and empty status string if they
 are missing, but backend-specific wrappers should provide as much useful
-metadata as their solver exposes.
+metadata as their solver exposes. See the [Metadata Schema](@ref) for the
+normative benchmarking contract.
 
-QUBODrivers recommends these top-level metadata keys for driver attributes:
+QUBODrivers requires these top-level metadata keys for benchmark-ready driver
+results:
 
+- `"origin"`: human-readable driver or backend origin;
 - `"algorithm"`: dictionary with at least `"name"`;
 - `"backend"`: dictionary with backend `"name"` and `"version"` when known;
 - `"execution"`: dictionary with `"mode"`;
@@ -166,7 +184,7 @@ QUBODrivers recommends these top-level metadata keys for driver attributes:
 - `"reads"`: dictionary with `"number_of_reads"` and
   `"final_number_of_reads"` counts actually consumed by internal search and
   final sample-set construction, respectively; if there is no separate
-  internal phase, both values may be the same;
+  internal phase, both values should be the same;
 - `"seeds"`: dictionary of sampler, model, optimizer, or backend seeds;
 - `"status"` and `"termination_status"`: raw and structured termination status.
 
@@ -174,6 +192,20 @@ When a post-sampling callback runs, QUBODrivers records callback metadata under
 `"postprocess" => "callback"`. If the callback transforms emitted samples, the
 raw sample frame and records are stored under
 `"postprocess" => "raw_samples"`.
+
+## Sampler checklist
+
+Before releasing a driver wrapper, confirm that:
+
+- `QUBODrivers.validate_metadata(sampleset)` returns an empty vector for normal
+  results; see the [Metadata Schema](@ref);
+- stochastic samplers expose raw `"seed"` and support
+  `QUBODrivers.RandomSeed()` when reproducibility is part of their contract;
+- `QUBODrivers.honors_final_reads` and
+  `QUBODrivers.enforces_time_limit` return `true` only for behavior the driver
+  actually guarantees;
+- `MOI.get(sampler, MOI.SolveTimeSec())` reports effective backend time, while
+  wall-clock time is available through `QUBODrivers.total_time`.
 
 ## A complete example
 
@@ -225,6 +257,7 @@ function QUBODrivers.sample(sampler::Optimizer{T}) where {T}
 
     # ~ Store some metadata ~ #
     metadata = Dict{String,Any}(
+        "origin"    => "Super Sampler @ SuperBackend",
         "algorithm" => Dict{String,Any}("name" => "Super Sampler"),
         "backend"   => Dict{String,Any}("name" => "SuperBackend", "version" => nothing),
         "execution" => Dict{String,Any}("mode" => "sampling"),

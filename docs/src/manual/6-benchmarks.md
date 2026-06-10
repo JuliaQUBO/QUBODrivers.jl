@@ -90,11 +90,17 @@ benchmark.
 
 ## Timing Information
 
-Samplers store timing metadata in the returned sample set. After solving,
-`MOI.get(backend(model), MOI.SolveTimeSec())` returns the effective solve time
-reported through MOI. This can differ from wall-clock timing around
-`optimize!`, especially for wrappers that separate model conversion, backend
-submission, queue time, and sample decoding.
+Samplers store timing metadata in the returned sample set. The standardized
+entries are `metadata["time"]["total"]`, the QUBODrivers wall-clock time around
+the sampling pipeline, and `metadata["time"]["effective"]`, the backend
+solve/sampling time reported by the driver.
+
+After solving, `MOI.get(backend(model), MOI.SolveTimeSec())` returns effective
+time. Use `QUBODrivers.total_time(sampleset)` or
+`QUBODrivers.total_time(sampler)` when the benchmark needs framework-inclusive
+wall time. This can differ from timing around `optimize!`, especially for
+wrappers that separate model conversion, backend submission, queue time, and
+sample decoding. See the [Metadata Schema](@ref) for the full contract.
 
 ## What to Report
 

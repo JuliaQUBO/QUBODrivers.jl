@@ -40,6 +40,8 @@ QUBODrivers.@setup Optimizer begin
     end
 end
 
+QUBODrivers.honors_final_reads(::Type{<:Optimizer}) = false
+
 @doc raw"""
     MIPOptimizer()
 
@@ -278,6 +280,7 @@ function QUBODrivers.sample(sampler::Optimizer{T}) where {T}
         backend_version       = _backend_attribute(backend, MOI.SolverVersion()),
         execution_mode        = "mip_solve",
         optimizer_evaluations = 1,
+        number_of_reads       = 1,
         final_number_of_reads = 1,
         status                = string(termination_status),
         termination_status    = termination_status,

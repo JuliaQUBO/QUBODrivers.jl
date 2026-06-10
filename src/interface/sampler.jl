@@ -26,7 +26,8 @@ samples use the same sense and domain as the backend output.
 `MOI.optimize!` calls this method and attaches the returned sample set to the
 optimizer. If the returned metadata does not include a `"time"` dictionary with
 a `"total"` entry, or does not include `"status"`, QUBODrivers fills those
-fields with default values.
+fields with default values. It then validates the benchmarking metadata schema
+and emits a warning, not an error, for missing or malformed fields.
 """
 function sample end
 
@@ -80,6 +81,178 @@ function _sampler_metadata(;
 end
 
 @doc raw"""
+    validate_metadata(sampleset::SampleSet)
+    validate_metadata(metadata::AbstractDict)
+
+Return a list of benchmarking metadata schema violations.
+
+The validator is intentionally non-throwing so driver authors can use it while
+migrating metadata. `MOI.optimize!` calls it after QUBODrivers stamps framework
+metadata and emits a warning when the returned list is not empty.
+"""
+function validate_metadata(sampleset::SampleSet)
+    return validate_metadata(QUBOTools.metadata(sampleset))
+end
+
+function validate_metadata(metadata::AbstractDict)
+    violations = String[]
+
+    _require_string_metadata!(violations, metadata, "metadata", "origin")
+    _require_string_metadata!(violations, metadata, "metadata", "status")
+
+    algorithm = _require_dict_metadata!(violations, metadata, "metadata", "algorithm")
+    if !isnothing(algorithm)
+        _require_string_metadata!(violations, algorithm, "metadata[\"algorithm\"]", "name")
+    end
+
+    backend = _require_dict_metadata!(violations, metadata, "metadata", "backend")
+    if !isnothing(backend)
+        _require_string_metadata!(violations, backend, "metadata[\"backend\"]", "name")
+        _require_backend_version_metadata!(
+            violations,
+            backend,
+            "metadata[\"backend\"]",
+            "version",
+        )
+    end
+
+    reads = _require_dict_metadata!(violations, metadata, "metadata", "reads")
+    if !isnothing(reads)
+        _require_nonnegative_integer_metadata!(
+            violations,
+            reads,
+            "metadata[\"reads\"]",
+            "number_of_reads",
+        )
+        _require_nonnegative_integer_metadata!(
+            violations,
+            reads,
+            "metadata[\"reads\"]",
+            "final_number_of_reads",
+        )
+    end
+
+    seeds = _require_dict_metadata!(violations, metadata, "metadata", "seeds")
+    if !isnothing(seeds)
+        _require_string_keys_metadata!(violations, seeds, "metadata[\"seeds\"]")
+    end
+
+    time = _require_dict_metadata!(violations, metadata, "metadata", "time")
+    if !isnothing(time)
+        _require_nonnegative_real_metadata!(
+            violations,
+            time,
+            "metadata[\"time\"]",
+            "total",
+        )
+        _require_nonnegative_real_metadata!(
+            violations,
+            time,
+            "metadata[\"time\"]",
+            "effective",
+        )
+    end
+
+    return violations
+end
+
+function _has_metadata_key!(violations::Vector{String}, metadata::AbstractDict, path, key)
+    if haskey(metadata, key)
+        return true
+    else
+        push!(violations, "$(path) must contain key \"$(key)\"")
+
+        return false
+    end
+end
+
+function _require_dict_metadata!(violations::Vector{String}, metadata::AbstractDict, path, key)
+    _has_metadata_key!(violations, metadata, path, key) || return nothing
+
+    value = metadata[key]
+
+    if value isa AbstractDict
+        return value
+    else
+        push!(violations, "$(path)[\"$(key)\"] must be a dictionary")
+
+        return nothing
+    end
+end
+
+function _require_string_metadata!(violations::Vector{String}, metadata::AbstractDict, path, key)
+    _has_metadata_key!(violations, metadata, path, key) || return nothing
+
+    value = metadata[key]
+    value isa AbstractString || push!(violations, "$(path)[\"$(key)\"] must be a string")
+
+    return nothing
+end
+
+function _require_backend_version_metadata!(
+    violations::Vector{String},
+    metadata::AbstractDict,
+    path,
+    key,
+)
+    _has_metadata_key!(violations, metadata, path, key) || return nothing
+
+    value = metadata[key]
+    if !(isnothing(value) || value isa VersionNumber || value isa AbstractString)
+        push!(
+            violations,
+            "$(path)[\"$(key)\"] must be a VersionNumber, string, or nothing",
+        )
+    end
+
+    return nothing
+end
+
+function _require_nonnegative_integer_metadata!(
+    violations::Vector{String},
+    metadata::AbstractDict,
+    path,
+    key,
+)
+    _has_metadata_key!(violations, metadata, path, key) || return nothing
+
+    value = metadata[key]
+    if !(value isa Integer && value >= zero(value))
+        push!(violations, "$(path)[\"$(key)\"] must be a non-negative integer")
+    end
+
+    return nothing
+end
+
+function _require_nonnegative_real_metadata!(
+    violations::Vector{String},
+    metadata::AbstractDict,
+    path,
+    key,
+)
+    _has_metadata_key!(violations, metadata, path, key) || return nothing
+
+    value = metadata[key]
+    if !(value isa Real && value >= zero(value))
+        push!(violations, "$(path)[\"$(key)\"] must be a non-negative real number")
+    end
+
+    return nothing
+end
+
+function _require_string_keys_metadata!(
+    violations::Vector{String},
+    metadata::AbstractDict,
+    path,
+)
+    for key in keys(metadata)
+        key isa AbstractString || push!(violations, "$(path) keys must be strings")
+    end
+
+    return nothing
+end
+
+@doc raw"""
     set_model!(sampler::AbstractSampler{T}, model::QUBOTools.Model{VI,T,Int}) where {T}
 
 Store the QUBOTools model backing a sampler.
@@ -115,7 +288,43 @@ function _sample!(sampler::AbstractSampler{T}, sampleset::SampleSet{T}, total_ti
         metadata["status"] = ""
     end
 
+    _record_random_seed_metadata!(sampler, metadata)
+    _warn_metadata_violations(sampleset)
+
     QUBOTools.attach!(sampler, sampleset)
+
+    return nothing
+end
+
+function _record_random_seed_metadata!(
+    sampler::AbstractSampler,
+    metadata::Dict{String,Any},
+)
+    seed = random_seed(sampler)
+
+    isnothing(seed) && return nothing
+
+    seeds = get(metadata, "seeds", nothing)
+    if seeds isa Dict{String,Any}
+        metadata_seeds = seeds
+    elseif seeds isa AbstractDict
+        metadata_seeds = Dict{String,Any}(string(key) => value for (key, value) in seeds)
+    else
+        metadata_seeds = Dict{String,Any}()
+    end
+
+    metadata_seeds["sampler"] = seed
+    metadata["seeds"] = metadata_seeds
+
+    return nothing
+end
+
+function _warn_metadata_violations(sampleset::SampleSet)
+    violations = validate_metadata(sampleset)
+
+    isempty(violations) && return nothing
+
+    @warn "SampleSet metadata does not conform to the QUBODrivers benchmarking schema" violations
 
     return nothing
 end

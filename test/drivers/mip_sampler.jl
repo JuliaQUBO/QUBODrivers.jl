@@ -362,6 +362,7 @@ function _test_mip_sampler_optional_attribute_and_metadata_fallbacks()
             metadata;
             algorithm_name        = "MIP Sampler",
             execution_mode        = "mip_solve",
+            number_of_reads       = 1,
             optimizer_evaluations = 1,
             final_number_of_reads = 1,
             status                = "OPTIMAL",

@@ -11,6 +11,7 @@ function _test_exact_sampler_metadata_schema()
             _solution_metadata(model);
             algorithm_name        = "Exact Sampler",
             execution_mode        = "exhaustive_search",
+            number_of_reads       = 2,
             optimizer_evaluations = 2,
             final_number_of_reads = 2,
             status                = "optimal",

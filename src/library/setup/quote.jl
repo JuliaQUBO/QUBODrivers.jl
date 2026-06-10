@@ -261,8 +261,42 @@ end
 
 function __setup_quote_qubodrivers_attrs(spec::_SamplerSpec)
     Optimizer = esc(spec.id)
+    random_seed_trait = if any(attr -> attr.raw_attr == _RANDOM_SEED_RAW, spec.attributes)
+        quote
+            QUBODrivers.supports_seed(::Type{<:$(Optimizer)}) = true
+        end
+    else
+        quote end
+    end
 
     return quote
+        $(random_seed_trait)
+
+        # QUBODrivers.RandomSeed - get
+        function MOI.get(sampler::$(Optimizer), ::QUBODrivers.RandomSeed)
+            return QUBODrivers.random_seed(sampler)
+        end
+
+        # QUBODrivers.RandomSeed - set
+        function MOI.set(sampler::$(Optimizer), ::QUBODrivers.RandomSeed, value)
+            MOI.supports(sampler, QUBODrivers.RandomSeed()) ||
+                error("'QUBODrivers.RandomSeed' is not supported by this sampler")
+
+            return MOI.set(sampler, QUBODrivers._RawRandomSeed(), value)
+        end
+
+        function MOI.set(sampler::$(Optimizer), attr::QUBODrivers._RawRandomSeed, value)
+            QUBODrivers._validate_random_seed(value)
+            QUBODrivers.set_raw_attr!(sampler, attr, value)
+
+            return nothing
+        end
+
+        # QUBODrivers.RandomSeed - support
+        function MOI.supports(sampler::$(Optimizer), ::QUBODrivers.RandomSeed)
+            return MOI.supports(sampler, QUBODrivers._RawRandomSeed())
+        end
+
         # QUBODrivers.FinalNumberOfReads - get
         function MOI.get(sampler::$(Optimizer), ::QUBODrivers.FinalNumberOfReads)
             return QUBODrivers.final_number_of_reads(sampler)

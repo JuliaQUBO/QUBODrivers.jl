@@ -9,11 +9,13 @@ function _assert_sampler_metadata_schema(
     algorithm_name::String,
     execution_mode::String,
     final_number_of_reads::Integer,
-    number_of_reads = nothing,
+    number_of_reads::Integer,
     optimizer_evaluations = nothing,
     status::String,
     termination_status,
 )
+    @test isempty(QUBODrivers.validate_metadata(metadata))
+    @test metadata["origin"] isa String
     @test metadata["algorithm"]["name"] == algorithm_name
     @test haskey(metadata["backend"], "name")
     @test haskey(metadata["backend"], "version")
@@ -23,6 +25,8 @@ function _assert_sampler_metadata_schema(
     @test metadata["reads"]["number_of_reads"] == number_of_reads
     @test metadata["reads"]["final_number_of_reads"] == final_number_of_reads
     @test haskey(metadata, "seeds")
+    @test metadata["time"]["total"] isa Real
+    @test metadata["time"]["effective"] isa Real
     @test metadata["status"] == status
     @test metadata["termination_status"] == termination_status
 
