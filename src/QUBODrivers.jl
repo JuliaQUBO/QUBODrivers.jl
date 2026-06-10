@@ -48,8 +48,11 @@ include("library/setup/parse.jl")
 include("library/setup/quote.jl")
 include("library/setup/macro.jl")
 
-export AbstractSampler, FinalNumberOfReads, final_number_of_reads
+export AbstractSampler, RandomSeed, random_seed
+export FinalNumberOfReads, final_number_of_reads
 export PostSampleCallback, PostSampleTransform, post_sample_callback, post_sample_transform
+export total_time, effective_time, validate_metadata
+export supports_seed, honors_final_reads, enforces_time_limit
 export ExactSampler, IdentitySampler, MIPSampler, RandomSampler
 
 include("library/drivers/ExactSampler.jl")

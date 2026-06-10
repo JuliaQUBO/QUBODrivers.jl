@@ -76,7 +76,7 @@ directly through MOI:
 ```julia
 optimizer = RandomSampler.Optimizer()
 MOI.set(optimizer, RandomSampler.NumberOfReads(), 10)
-MOI.set(optimizer, RandomSampler.RandomSeed(), 123)
+MOI.set(optimizer, QUBODrivers.RandomSeed(), 123)
 ```
 
 ## Fixed Variables and Starts

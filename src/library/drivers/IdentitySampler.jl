@@ -22,6 +22,8 @@ QUBODrivers.@setup Optimizer begin
     version = QUBODrivers.__version__()
 end
 
+QUBODrivers.honors_final_reads(::Type{<:Optimizer}) = false
+
 function sample_state(sampler::Optimizer{T}, n::Integer) where {T}
     ψ = Vector{Int}(undef, n)
 
@@ -59,6 +61,7 @@ function QUBODrivers.sample(sampler::Optimizer{T}) where {T}
         algorithm_name        = "Identity Sampler",
         execution_mode        = "warm_start",
         optimizer_evaluations = 1,
+        number_of_reads       = 1,
         final_number_of_reads = 1,
         status                = "locally_solved",
         termination_status    = MOI.LOCALLY_SOLVED,

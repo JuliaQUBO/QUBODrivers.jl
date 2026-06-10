@@ -17,7 +17,8 @@ evaluates their objective values with QUBOTools, and returns the final sampled
 states.
 
 ## Attributes
-- `RandomSeed`, `"seed"`: Random seed to initialize the random number generator.
+- `QUBODrivers.RandomSeed`, `"seed"`: Random seed to initialize the random
+  number generator.
 - `NumberOfReads`, `"num_reads"`: Default final read count.
 - `QUBODrivers.FinalNumberOfReads`, `"final_num_reads"`: Number of random
   states emitted in the returned sample set. If unset, this defaults to
@@ -28,11 +29,13 @@ QUBODrivers.@setup Optimizer begin
     name       = "Random Sampler"
     version    = QUBODrivers.__version__()
     attributes = begin
-        RandomSeed["seed"]::Union{Integer,Nothing} = nothing
+        "seed"::Union{Integer,Nothing}             = nothing
         NumberOfReads["num_reads"]::Integer        = 1_000
         RandomGenerator["rng"]::AbstractRNG        = Random.GLOBAL_RNG
     end
 end
+
+QUBODrivers.honors_final_reads(::Type{<:Optimizer}) = true
 
 sample_state(rng::AbstractRNG, n::Integer) = rand(rng, (0, 1), n)
 
@@ -43,7 +46,7 @@ function QUBODrivers.sample(sampler::Optimizer{T}) where {T}
     # Retrieve Attributes
     num_reads       = MOI.get(sampler, NumberOfReads())
     final_num_reads = MOI.get(sampler, QUBODrivers.FinalNumberOfReads())
-    seed            = MOI.get(sampler, RandomSeed())
+    seed            = MOI.get(sampler, QUBODrivers.RandomSeed())
     rng             = MOI.get(sampler, RandomGenerator())
 
     # Validate Input
@@ -72,7 +75,6 @@ function QUBODrivers.sample(sampler::Optimizer{T}) where {T}
         optimizer_evaluations = final_num_reads,
         number_of_reads       = final_num_reads,
         final_number_of_reads = final_num_reads,
-        seeds                 = Dict{String,Any}("sampler" => seed),
         status                = "locally_solved",
         termination_status    = MOI.LOCALLY_SOLVED,
     )

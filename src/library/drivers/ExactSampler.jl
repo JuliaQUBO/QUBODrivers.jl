@@ -22,6 +22,8 @@ QUBODrivers.@setup Optimizer begin
     version = QUBODrivers.__version__()
 end
 
+QUBODrivers.honors_final_reads(::Type{<:Optimizer}) = false
+
 sample_state(i::Integer, n::Integer) = digits(Int, i - 1; base = 2, pad = n)
 
 function QUBODrivers.sample(sampler::Optimizer{T}) where {T}
@@ -46,6 +48,7 @@ function QUBODrivers.sample(sampler::Optimizer{T}) where {T}
         algorithm_name        = "Exact Sampler",
         execution_mode        = "exhaustive_search",
         optimizer_evaluations = m,
+        number_of_reads       = m,
         final_number_of_reads = m,
         status                = "optimal",
         termination_status    = MOI.OPTIMAL,

@@ -3,7 +3,9 @@ function test_setup_macro()
         test_project_version()
         test_project_compat()
         test_setup_spec_parser()
+        test_random_seed_attribute_defaults()
         test_final_number_of_reads_fallbacks()
+        test_capability_traits()
         test_post_sample_attribute_defaults()
         test_post_sample_callback_optimize_fallbacks()
     end
@@ -47,6 +49,37 @@ function test_project_compat()
     return nothing
 end
 
+function test_random_seed_attribute_defaults()
+    @testset "→ RandomSeed attribute" begin
+        sampler = RandomSampler.Optimizer()
+
+        @test QUBODrivers.supports_seed(sampler)
+        @test QUBODrivers.supports_seed(RandomSampler.Optimizer)
+        @test MOI.supports(sampler, QUBODrivers.RandomSeed())
+        @test MOI.supports(sampler, MOI.RawOptimizerAttribute("seed"))
+        @test MOI.get(sampler, QUBODrivers.RandomSeed()) === nothing
+        @test QUBODrivers.random_seed(sampler) === nothing
+
+        MOI.set(sampler, QUBODrivers.RandomSeed(), 11)
+        @test MOI.get(sampler, QUBODrivers.RandomSeed()) == 11
+        @test MOI.get(sampler, MOI.RawOptimizerAttribute("seed")) == 11
+        @test QUBODrivers.random_seed(sampler) == 11
+
+        MOI.set(sampler, MOI.RawOptimizerAttribute("seed"), nothing)
+        @test MOI.get(sampler, QUBODrivers.RandomSeed()) === nothing
+
+        @test_throws ErrorException MOI.set(sampler, QUBODrivers.RandomSeed(), -1)
+        @test_throws ErrorException MOI.set(sampler, MOI.RawOptimizerAttribute("seed"), -1)
+
+        exact_sampler = ExactSampler.Optimizer()
+        @test !QUBODrivers.supports_seed(exact_sampler)
+        @test !MOI.supports(exact_sampler, QUBODrivers.RandomSeed())
+        @test QUBODrivers.random_seed(exact_sampler) === nothing
+    end
+
+    return nothing
+end
+
 function test_post_sample_attribute_defaults()
     @testset "→ Post-sample callback attributes" begin
         sampler = RandomSampler.Optimizer()
@@ -75,6 +108,27 @@ function test_post_sample_attribute_defaults()
             QUBODrivers.PostSampleTransform(),
             "true",
         )
+    end
+
+    return nothing
+end
+
+function test_capability_traits()
+    @testset "→ Capability traits" begin
+        @test QUBODrivers.supports_seed(RandomSampler.Optimizer)
+        @test !QUBODrivers.supports_seed(ExactSampler.Optimizer)
+        @test !QUBODrivers.supports_seed(IdentitySampler.Optimizer)
+        @test !QUBODrivers.supports_seed(MIPSampler.Optimizer)
+
+        @test QUBODrivers.honors_final_reads(RandomSampler.Optimizer)
+        @test !QUBODrivers.honors_final_reads(ExactSampler.Optimizer)
+        @test !QUBODrivers.honors_final_reads(IdentitySampler.Optimizer)
+        @test !QUBODrivers.honors_final_reads(MIPSampler.Optimizer)
+
+        @test !QUBODrivers.enforces_time_limit(RandomSampler.Optimizer)
+        @test !QUBODrivers.enforces_time_limit(ExactSampler.Optimizer)
+        @test !QUBODrivers.enforces_time_limit(IdentitySampler.Optimizer)
+        @test !QUBODrivers.enforces_time_limit(MIPSampler.Optimizer)
     end
 
     return nothing
@@ -115,6 +169,7 @@ function _custom_sampleset()
         final_number_of_reads = 1,
         status                = "locally_solved",
     )
+    metadata["time"] = Dict{String,Any}("effective" => 0.0)
     samples = [QUBOTools.Sample{Float64,Int}([0], 0.0)]
 
     return QUBOTools.SampleSet{Float64,Int}(samples, metadata; sense = :min, domain = :bool)

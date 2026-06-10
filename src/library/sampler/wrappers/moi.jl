@@ -516,7 +516,7 @@ function MOI.get(sampler::AbstractSampler{T}, ov::MOI.ObjectiveValue) where {T}
 end
 
 function MOI.get(sampler::AbstractSampler{T}, ::MOI.SolveTimeSec) where {T}
-    return QUBOTools.effective_time(QUBOTools.solution(sampler))
+    return effective_time(sampler)
 end
 
 function MOI.get(sampler::AbstractSampler{T}, vp::MOI.VariablePrimal, vi::VI) where {T}

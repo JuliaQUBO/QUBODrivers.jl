@@ -123,8 +123,14 @@ function _test_random_sampler_final_number_of_reads_sampling()
         MOI.optimize!(default_model)
 
         default_metadata = _solution_metadata(default_model)
+        default_solution = _random_solution(default_model)
 
         @test _random_total_reads(default_model) == 7
+        @test default_metadata["seeds"]["sampler"] == 1
+        @test isempty(QUBODrivers.validate_metadata(default_solution))
+        @test QUBODrivers.total_time(default_solution) isa Real
+        @test QUBODrivers.effective_time(default_solution) isa Real
+        @test MOI.get(default_model, MOI.SolveTimeSec()) == QUBODrivers.effective_time(default_solution)
         @test !haskey(default_metadata, "postprocess")
         _assert_sampler_metadata_schema(
             default_metadata;
@@ -144,6 +150,7 @@ function _test_random_sampler_final_number_of_reads_sampling()
         override_metadata = _solution_metadata(override_model)
 
         @test _random_total_reads(override_model) == 3
+        @test override_metadata["seeds"]["sampler"] == 1
         _assert_sampler_metadata_schema(
             override_metadata;
             algorithm_name        = "Random Sampler",

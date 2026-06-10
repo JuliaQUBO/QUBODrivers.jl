@@ -16,6 +16,7 @@ function _test_identity_sampler_metadata_schema()
             _solution_metadata(model);
             algorithm_name        = "Identity Sampler",
             execution_mode        = "warm_start",
+            number_of_reads       = 1,
             optimizer_evaluations = 1,
             final_number_of_reads = 1,
             status                = "locally_solved",

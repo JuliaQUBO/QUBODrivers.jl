@@ -23,12 +23,20 @@ QUBODrivers.set_model!
 ```@docs; canonical=false
 QUBODrivers.@setup
 QUBODrivers.SamplerAttribute
+QUBODrivers.RandomSeed
+QUBODrivers.random_seed
 QUBODrivers.FinalNumberOfReads
 QUBODrivers.final_number_of_reads
 QUBODrivers.PostSampleCallback
 QUBODrivers.PostSampleTransform
 QUBODrivers.post_sample_callback
 QUBODrivers.post_sample_transform
+QUBODrivers.total_time
+QUBODrivers.effective_time
+QUBODrivers.validate_metadata
+QUBODrivers.supports_seed
+QUBODrivers.honors_final_reads
+QUBODrivers.enforces_time_limit
 QUBODrivers.RawSamplerAttribute
 QUBODrivers.@raw_attr_str
 QUBODrivers.get_raw_attr

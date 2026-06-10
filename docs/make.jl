@@ -26,6 +26,7 @@ makedocs(;
             "Implementing a Sampler" => "manual/7-integration.md",
             "Test Suite"    => "manual/5-tests.md",
             "Benchmarking"  => "manual/6-benchmarks.md",
+            "Metadata Schema" => "manual/metadata.md",
             "API Reference" => "manual/8-api.md",
         ],
         "Booklet" => [

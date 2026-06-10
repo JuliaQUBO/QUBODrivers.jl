@@ -26,14 +26,29 @@ end
 RawSamplerAttribute(key::String) = RawSamplerAttribute{Symbol(key)}()
 
 const _NUMBER_OF_READS_RAW       = "num_reads"
+const _RANDOM_SEED_RAW           = "seed"
 const _FINAL_NUMBER_OF_READS_RAW = "final_num_reads"
 const _POST_SAMPLE_CALLBACK_RAW  = "post_sample_callback"
 const _POST_SAMPLE_TRANSFORM_RAW = "post_sample_transform"
 
 const _RawNumberOfReads       = RawSamplerAttribute{Symbol(_NUMBER_OF_READS_RAW)}
+const _RawRandomSeed          = RawSamplerAttribute{Symbol(_RANDOM_SEED_RAW)}
 const _RawFinalNumberOfReads  = RawSamplerAttribute{Symbol(_FINAL_NUMBER_OF_READS_RAW)}
 const _RawPostSampleCallback  = RawSamplerAttribute{Symbol(_POST_SAMPLE_CALLBACK_RAW)}
 const _RawPostSampleTransform = RawSamplerAttribute{Symbol(_POST_SAMPLE_TRANSFORM_RAW)}
+
+@doc raw"""
+    RandomSeed()
+
+Generic sampler optimizer attribute for a reproducibility seed.
+
+The raw optimizer attribute key is `"seed"`, and the default value is
+`nothing`. Generated optimizers support this typed attribute when the driver
+declares the raw `"seed"` attribute in its [`QUBODrivers.@setup`](@ref) block.
+When a seed is set, QUBODrivers records it under
+`metadata["seeds"]["sampler"]` in the emitted `SampleSet`.
+"""
+struct RandomSeed <: SamplerAttribute end
 
 @doc raw"""
     FinalNumberOfReads()
@@ -133,6 +148,24 @@ backend-specific options before storing them.
 function set_raw_attr! end
 
 @doc raw"""
+    random_seed(sampler)
+
+Return the configured sampler seed, or `nothing` when the sampler does not
+support the standard seed attribute or no seed is configured.
+"""
+function random_seed(sampler::AbstractSampler)
+    attr = _RawRandomSeed()
+
+    try
+        MOI.supports(sampler, attr) || return nothing
+
+        return MOI.get(sampler, attr)
+    catch err
+        _is_unavailable_raw_attr(err, attr) ? nothing : rethrow()
+    end
+end
+
+@doc raw"""
     final_number_of_reads(sampler)
 
 Return the effective final read count for `sampler`.
@@ -193,6 +226,61 @@ function post_sample_transform(sampler::AbstractSampler)::Bool
     return transform::Bool
 end
 
+@doc raw"""
+    total_time(sampleset_or_sampler)
+
+Return `metadata["time"]["total"]`, the wall-clock seconds measured around the
+QUBODrivers sampling pipeline, or `nothing` when it is not available.
+"""
+total_time(sampleset::SampleSet) = _metadata_time(sampleset, "total")
+total_time(sampler::AbstractSampler) = total_time(QUBOTools.solution(sampler))
+
+@doc raw"""
+    effective_time(sampleset_or_sampler)
+
+Return `metadata["time"]["effective"]`, the backend solve/sampling seconds
+reported by the driver, or `nothing` when it is not available.
+"""
+effective_time(sampleset::SampleSet) = _metadata_time(sampleset, "effective")
+effective_time(sampler::AbstractSampler) = effective_time(QUBOTools.solution(sampler))
+
+@doc raw"""
+    supports_seed(sampler_or_type)::Bool
+
+Return whether a sampler advertises support for the standard
+[`RandomSeed`](@ref) attribute.
+"""
+supports_seed(::Type{<:AbstractSampler}) = false
+supports_seed(sampler::AbstractSampler) = supports_seed(typeof(sampler))
+
+@doc raw"""
+    honors_final_reads(sampler_or_type)::Bool
+
+Return whether a sampler uses [`FinalNumberOfReads`](@ref) to control the
+number of samples emitted in the final `SampleSet`.
+"""
+honors_final_reads(::Type{<:AbstractSampler}) = false
+honors_final_reads(sampler::AbstractSampler) = honors_final_reads(typeof(sampler))
+
+@doc raw"""
+    enforces_time_limit(sampler_or_type)::Bool
+
+Return whether a sampler enforces `MOI.TimeLimitSec()` as part of its own
+sampling contract. The default is conservative because many wrappers only store
+or forward the attribute.
+"""
+enforces_time_limit(::Type{<:AbstractSampler}) = false
+enforces_time_limit(sampler::AbstractSampler) = enforces_time_limit(typeof(sampler))
+
+function _metadata_time(sampleset::SampleSet, key::String)
+    metadata = QUBOTools.metadata(sampleset)
+    time = get(metadata, "time", nothing)
+
+    time isa AbstractDict || return nothing
+
+    return get(time, key, nothing)
+end
+
 function _is_unavailable_raw_attr(err, attr::RawSamplerAttribute)
     return err isa MOI.GetAttributeNotAllowed{typeof(attr)}
 end
@@ -207,6 +295,14 @@ function _default_number_of_reads(sampler::AbstractSampler)
     catch err
         _is_unavailable_raw_attr(err, attr) ? nothing : rethrow()
     end
+end
+
+function _validate_random_seed(value)
+    if !(isnothing(value) || (value isa Integer && value >= zero(value)))
+        error("Value for 'RandomSeed' must be a non-negative integer, or 'nothing'")
+    end
+
+    return nothing
 end
 
 function _validate_final_number_of_reads(value)
@@ -226,6 +322,8 @@ function _validate_post_sample_transform(value)
     return nothing
 end
 
+MOIU.map_indices(_, ::RandomSeed, value) = value
+MOIU.map_indices(_, ::_RawRandomSeed, value) = value
 MOIU.map_indices(_, ::FinalNumberOfReads, value) = value
 MOIU.map_indices(_, ::_RawFinalNumberOfReads, value) = value
 MOIU.map_indices(_, ::PostSampleCallback, value) = value
