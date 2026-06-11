@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+## v0.6.1 - 2026-06-11
+
+### Added / Changed / Maintenance
+
+- Add the benchmark metadata contract used by driver release-wave
+  conformance: `QUBODrivers.RandomSeed`, `validate_metadata`,
+  `total_time`, `effective_time`, and conservative capability traits.
+- Update ExactSampler, IdentitySampler, MIPSampler, and RandomSampler to
+  validate against the benchmark metadata schema.
+- Add default-on benchmark conformance checks to `QUBODrivers.test`,
+  including metadata, timing, seed determinism, read semantics, time-limit
+  acceptance, and termination-status assertions.
+- Document the metadata schema, seed/read/time-limit semantics, and the new
+  test-suite conformance controls.
+
 ## v0.6.0 - 2026-06-08
 
 ### Breaking changes
