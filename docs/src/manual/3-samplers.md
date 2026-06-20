@@ -144,6 +144,11 @@ Several JuliaQUBO packages implement the same sampler interface for external
 libraries, heuristics, or services. Their source can be useful when building a
 new wrapper.
 
+This table is the reviewed source of truth for public external sampler
+packages. When a new JuliaQUBO or SECQUOIA driver package is ready for users,
+open a QUBODrivers documentation PR that adds its package URL, solver type, and
+source file path.
+
 | Project                                                                                   | Solver                                | Source Code                                                                                                                                |
 | :---------------------------------------------------------------------------------------- | :------------------------------------ | :----------------------------------------------------------------------------------------------------------------------------------------- |
 | [DWave.jl](https://github.com/JuliaQUBO/DWave.jl)                                         | `DWave.Optimizer`                     | [`src/sampler.jl`](https://github.com/JuliaQUBO/DWave.jl/blob/main/src/sampler.jl)                                                         |
