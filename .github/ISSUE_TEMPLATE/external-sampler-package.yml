@@ -1,0 +1,60 @@
+name: Register external sampler package
+description: Request a QUBODrivers docs entry for an external sampler package.
+title: "[docs] Register external sampler: "
+labels: ["documentation"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template when a public JuliaQUBO or SECQUOIA sampler package
+        should be listed in the external sampler package table.
+  - type: input
+    id: package_url
+    attributes:
+      label: Package repository URL
+      description: Link to the sampler package repository.
+      placeholder: https://github.com/JuliaQUBO/Package.jl
+    validations:
+      required: true
+  - type: input
+    id: solver_symbol
+    attributes:
+      label: Solver type
+      description: Public optimizer type users should pass to JuMP or MOI.
+      placeholder: Package.Optimizer
+    validations:
+      required: true
+  - type: input
+    id: source_path
+    attributes:
+      label: Source file path
+      description: Repository path that defines the public optimizer.
+      placeholder: src/Package.jl
+    validations:
+      required: true
+  - type: dropdown
+    id: package_status
+    attributes:
+      label: Package status
+      options:
+        - Public and current
+        - Deprecated compatibility package
+        - Experimental or private
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Mention related packages, renamed repositories, or anything maintainers should verify.
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: The package implements the QUBODrivers sampler interface.
+          required: true
+        - label: The source path is public and points to the optimizer implementation.
+          required: true
+        - label: The package should be listed as a current external sampler, or the deprecation reason is explained above.
+          required: true

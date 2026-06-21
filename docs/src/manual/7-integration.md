@@ -232,3 +232,25 @@ When the package is stable enough for wider use, register it with Julia's
 General registry using Registrator. Before registering, confirm the package has
 a unique UUID, an incremented `version`, explicit `[compat]` bounds, passing CI,
 and documentation that points users back to this QUBODrivers interface guide.
+
+### Registering the package with QUBODrivers docs
+
+If the sampler package is public and current in the JuliaQUBO or SECQUOIA
+organizations, open a QUBODrivers documentation PR that adds it to the external
+sampler table in `docs/src/manual/3-samplers.md`. That table is maintained as
+the reviewed source of truth rather than generated from GitHub search.
+
+Include:
+
+- the package repository URL;
+- the public solver type, such as `Package.Optimizer` or
+  `Package.Submodule.Optimizer`;
+- the source file path that defines the optimizer;
+- a note when the package is deprecated, renamed, experimental, private, or a
+  compatibility shim.
+
+For documentation-only registration PRs, run:
+
+```sh
+julia --project=docs/ docs/make.jl --skip-deploy
+```
