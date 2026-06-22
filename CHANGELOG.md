@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## v0.6.2 - 2026-06-22
+
+### Added / Changed / Maintenance
+
+- Document public external sampler packages with solver types and source paths,
+  and add the registration workflow for future sampler documentation updates.
+- Add issue and pull request templates for external sampler documentation
+  changes.
+- Harden TagBot permissions for issue-comment release automation.
+- Add release process guardrails and a static release preflight check.
+
 ## v0.6.1 - 2026-06-11
 
 ### Added / Changed / Maintenance
