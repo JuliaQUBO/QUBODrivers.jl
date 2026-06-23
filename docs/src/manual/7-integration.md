@@ -166,7 +166,7 @@ QUBOTools = "60eb5b62-0a39-4ddc-84c5-97d2adff9319"
 [compat]
 MathOptInterface = "1"
 QUBODrivers = "0.6"
-QUBOTools = "0.10, 0.11, 0.12, 0.13"
+QUBOTools = "0.10, 0.11, 0.12, 0.13, 0.14"
 julia = "1.10"
 ```
 
