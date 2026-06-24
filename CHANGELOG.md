@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## v0.6.4 - 2026-06-24
+
+### Added / Changed / Maintenance
+
+- Allow QUBOTools 0.15 while retaining QUBOTools 0.10, 0.11, 0.12, 0.13,
+  and 0.14 compatibility.
+
 ## v0.6.3 - 2026-06-22
 
 ### Added / Changed / Maintenance
