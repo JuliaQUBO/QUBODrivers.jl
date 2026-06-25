@@ -1,7 +1,7 @@
 name = "QUBODrivers"
 uuid = "a3f166f7-2cd3-47b6-9e1e-6fbfe0449eb0"
 authors = ["pedromxavier <mail@pedro.ϵλ>", "pedroripper <pedroripper@psr-inc.com>", "AndradeTiago <tiago.andrade@psr-inc.com>", "joaquimg <joaquim@psr-inc.com>", "bernalde <dbernaln@purdue.edu>"]
-version = "0.6.4"
+version = "0.6.5"
 
 [deps]
 MathOptInterface = "b8f27783-ece8-5eb3-8dc8-9495eed66fee"
