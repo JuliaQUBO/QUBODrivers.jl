@@ -9,7 +9,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 MINIMUM_JULIA_VERSION = "1.10"
 LATEST_STABLE_JULIA_VERSION = "1"
 QUBOTOOLS_CURRENT_COMPAT_VERSION = "0.16"
-SUPPORTED_CI_RUNNERS = {"ubuntu-latest", "windows-2025-vs2026"}
+SUPPORTED_CI_RUNNERS = {"ubuntu-latest", "windows-latest"}
 DEPRECATED_WORKFLOW_REFERENCES = (
     "actions/checkout@v4",
     "actions/setup-python@v5",
@@ -17,7 +17,7 @@ DEPRECATED_WORKFLOW_REFERENCES = (
     "julia-actions/setup-julia@latest",
     "actions/labeler@v5",
     "codecov/codecov-action@v5",
-    "windows-latest",
+    "windows-2025-vs2026",
 )
 
 
