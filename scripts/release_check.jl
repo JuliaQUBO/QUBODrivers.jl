@@ -25,6 +25,8 @@ function read_toml(parts...)
     return TOML.parsefile(project_file(parts...))
 end
 
+compat_entries(value::AbstractString) = Set(strip.(split(value, ',')))
+
 function release_heading_matches(line::AbstractString, version::VersionNumber)
     prefix = "## v$(version)"
     startswith(line, prefix) || return false
@@ -77,18 +79,27 @@ function main()
     )
     check!(
         failures,
-        get(docs_compat, "MathOptInterface", nothing) == root_compat["MathOptInterface"],
-        "docs/Project.toml MathOptInterface compat must match Project.toml.",
+        issubset(
+            compat_entries(docs_compat["MathOptInterface"]),
+            compat_entries(root_compat["MathOptInterface"]),
+        ),
+        "docs/Project.toml MathOptInterface compat must be supported by Project.toml.",
     )
     check!(
         failures,
-        get(docs_compat, "QUBOTools", nothing) == root_compat["QUBOTools"],
-        "docs/Project.toml QUBOTools compat must match Project.toml.",
+        issubset(
+            compat_entries(docs_compat["QUBOTools"]),
+            compat_entries(root_compat["QUBOTools"]),
+        ),
+        "docs/Project.toml QUBOTools compat must be supported by Project.toml.",
     )
     check!(
         failures,
-        get(test_compat, "PythonCall", nothing) == root_compat["PythonCall"],
-        "test/Project.toml PythonCall compat must match Project.toml.",
+        issubset(
+            compat_entries(test_compat["PythonCall"]),
+            compat_entries(root_compat["PythonCall"]),
+        ),
+        "test/Project.toml PythonCall compat must be supported by Project.toml.",
     )
     check!(
         failures,
