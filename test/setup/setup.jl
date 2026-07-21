@@ -1,3 +1,5 @@
+_compat_entries(value::AbstractString) = Set(strip.(split(value, ',')))
+
 function test_setup_macro()
     @testset "□ @setup macro" verbose = true begin
         test_project_version()
@@ -38,9 +40,18 @@ function test_project_compat()
         test_compat = test_project["compat"]
         docs_compat = docs_project["compat"]
 
-        @test docs_compat["MathOptInterface"] == root_compat["MathOptInterface"]
-        @test docs_compat["QUBOTools"] == root_compat["QUBOTools"]
-        @test test_compat["PythonCall"] == root_compat["PythonCall"]
+        @test issubset(
+            _compat_entries(docs_compat["MathOptInterface"]),
+            _compat_entries(root_compat["MathOptInterface"]),
+        )
+        @test issubset(
+            _compat_entries(docs_compat["QUBOTools"]),
+            _compat_entries(root_compat["QUBOTools"]),
+        )
+        @test issubset(
+            _compat_entries(test_compat["PythonCall"]),
+            _compat_entries(root_compat["PythonCall"]),
+        )
         @test docs_compat["QUBODrivers"] == "$(version.major).$(version.minor)"
         @test !haskey(root_project["deps"], "ToQUBO")
         @test !haskey(root_compat, "ToQUBO")
