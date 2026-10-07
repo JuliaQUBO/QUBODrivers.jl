@@ -63,7 +63,8 @@ output="$repo/output"
 )
 
 assert_file_contains "$output" "deleted=true"
-git -C "$repo" rev-parse --verify gh-pages-new >/dev/null
+assert_no_branch "$repo" "gh-pages-new"
+test "$(git -C "$repo" rev-list --count HEAD)" = 2
 if git -C "$repo" show HEAD:previews/PR14/index.html >/dev/null 2>&1; then
     printf 'expected previews/PR14/index.html to be deleted\n' >&2
     exit 1
