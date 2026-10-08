@@ -1,36 +1,59 @@
 name: Doc Preview Cleanup
+run-name: "${{ format('Doc Preview Cleanup PR #{0}', github.event.pull_request.number || inputs.pr_number) }}"
 
 on:
   pull_request:
     types: [closed]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Closed PR whose preview should be removed
+        type: string
+        required: true
+
+permissions:
+  contents: write
+  pull-requests: read
+
+# Acquire the same queue as docs.yml before checking out gh-pages.
+concurrency:
+  group: documentation-publishing
+  cancel-in-progress: false
+  queue: max
 
 jobs:
   doc-preview-cleanup:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
+      - name: Verify PR is closed
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PRNUM: ${{ github.event.pull_request.number || inputs.pr_number }}
+        run: |
+          if [[ ! "$PRNUM" =~ ^[1-9][0-9]*$ ]]; then
+            echo "A positive PR number is required"
+            exit 1
+          fi
+          pr_state=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PRNUM" --jq '.state')
+          test "$pr_state" = closed
+      - name: Checkout trusted cleanup implementation
+        uses: actions/checkout@v7.0.1
         with:
-          ref: ${{ github.event.pull_request.base.ref }}
+          ref: main
           path: repo
-
+          persist-credentials: false
       - name: Checkout gh-pages branch
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
         with:
           ref: gh-pages
           path: gh-pages
-
-      - name: Delete preview and history
+      - name: Delete preview
         id: cleanup
         working-directory: gh-pages
         run: bash ../repo/.github/scripts/doc_preview_cleanup.sh
         env:
-            PRNUM: ${{ github.event.number }}
-
+          PRNUM: ${{ github.event.pull_request.number || inputs.pr_number }}
       - name: Push changes
         if: steps.cleanup.outputs.deleted == 'true'
         working-directory: gh-pages
-        run: git push --force origin gh-pages-new:gh-pages
-# Workflow copied from https://github.com/CliMA/TimeMachine.jl
+        run: git push origin HEAD:gh-pages

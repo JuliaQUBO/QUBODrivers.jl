@@ -8,8 +8,6 @@ set -euo pipefail
 
 preview_path="${PREVIEW_PATH:-previews/PR${PRNUM}}"
 commit_message="${COMMIT_MESSAGE:-delete preview}"
-history_message="${HISTORY_MESSAGE:-delete history}"
-new_branch_name="${NEW_BRANCH_NAME:-gh-pages-new}"
 git_user_name="${GIT_USER_NAME:-Documenter.jl}"
 git_user_email="${GIT_USER_EMAIL:-documenter@juliadocs.github.io}"
 
@@ -26,11 +24,6 @@ if git diff --cached --quiet; then
 fi
 
 git commit -m "$commit_message"
-
-tree_commit="$(
-    printf '%s\n' "$history_message" | git commit-tree HEAD^{tree}
-)"
-git branch "$new_branch_name" "$tree_commit"
 
 if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
     echo "deleted=true" >> "$GITHUB_OUTPUT"
