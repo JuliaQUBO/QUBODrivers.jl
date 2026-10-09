@@ -81,7 +81,64 @@ The default for each trait is `false`. Drivers should define a method returning
 time limit to a backend is not the same as guaranteeing enforcement unless the
 driver can rely on that backend behavior.
 
-## Validation
+## Composite accounting
+
+The existing schema permits additional dictionaries with string keys. A
+composite should describe its counters and timing scopes in a package-specific
+namespace, without changing the meaning of other drivers' metadata.
+
+For example,
+[QUBODecomposition's accounting contract](https://juliaqubo.github.io/QUBODecomposition.jl/dev/budgets/)
+uses a `"decomposition"` dictionary with schema version 1:
+
+| Quantity | Meaning in this composite |
+| --- | --- |
+| `reads.number_of_reads` | Independently evaluated full candidates, including the initial state and lifted child rows; duplicate evaluations still consume work. |
+| `reads.final_number_of_reads` | Emitted multiplicity: one for a validated global incumbent, zero if none exists. |
+| `decomposition.candidate_evaluations` | Parent evaluation-budget consumption, separate from attempted/completed child-call counters. |
+| `decomposition.calls[k].reported_results` | Number of rows reported by that child, when queried successfully; a complete scan is separately validated. |
+| `decomposition.calls[k].reported_multiplicities` | Child row multiplicities when available through public QUBOTools queries; these are diagnostics, not parent multiplicities. |
+| `decomposition.calls[k].physical_reads` | `nothing` when physical observations are unknown. Enumeration and constructed states do not establish hardware measurements. |
+
+Do not add or multiply child multiplicities to imply independently observed
+global samples. A composite may construct a single global state from several
+child solves; that state has no physical global-read count merely because each
+child reported reads. Keep unknown observations in optional diagnostics, rather
+than putting `nothing` in either required integer read field. This convention
+does not redefine the read counters of ordinary backend drivers.
+
+For this composite, `time.effective` includes parent preparation,
+conditioning, copying/configuration, child execution, validation/reconstruction
+and independent original-energy evaluation. `MOI.SolveTimeSec()` returns that
+effective time. Leave `time.total` unset in `sample` so the framework fills the
+enclosing measurement, including post-sample callbacks. The current framework
+fills a missing total; it preserves a total already supplied by a driver.
+
+The package's `decomposition.phase_sec` breakdown is disjoint; its sum is at
+most effective time, which also includes unclassified orchestration and final
+sample preparation. `child_execution_sec` aliases the execution phase and must
+not be added again. Parent effective time already contains child execution:
+neither child-reported effective times nor child wall times should be added to
+the parent total. Keep per-call diagnostics separate and state their scope.
+
+A parent limit covers one invocation, including its preparation and
+reconstruction. A child limit covers one child call; the forwarded limit can be
+the minimum of its factory-configured limit, per-child cap and remaining parent
+time. An outer ToQUBO refinement budget covers repeated compiler/composite
+invocations and is another scope. Automatic refinement in released ToQUBO 0.7.1
+does not establish a shared wall-clock deadline. Forwarding `MOI.TimeLimitSec`
+cannot forcibly cancel an opaque synchronous child, so this composite reports
+`enforces_time_limit == false` and records overruns.
+
+Likewise, `supports_seed == true` describes the parent's public seed support;
+record each derived child seed and whether the child accepts it. Repeatability
+also depends on child behavior, ordered input, versions and effective work;
+wall-clock caps and arbitrary factories cannot guarantee it. This composite
+accepts `FinalNumberOfReads` but reports `honors_final_reads == false`. See its
+[results contract](https://juliaqubo.github.io/QUBODecomposition.jl/dev/results/)
+and [Public composition pattern](@ref) for conservative result/status handling.
+
+## Checking metadata
 
 ```julia
 violations = QUBODrivers.validate_metadata(sampleset)

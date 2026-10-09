@@ -160,5 +160,27 @@ source file path.
 | [QiskitOpt.jl](https://github.com/JuliaQUBO/QiskitOpt.jl)                                 | `QiskitOpt.VQE.Optimizer`             | [`src/VQE.jl`](https://github.com/JuliaQUBO/QiskitOpt.jl/blob/main/src/VQE.jl)                                                             |
 | [PySA.jl](https://github.com/JuliaQUBO/PySA.jl)                                           | `PySA.Optimizer`                      | [`src/PySA.jl`](https://github.com/JuliaQUBO/PySA.jl/blob/main/src/PySA.jl)                                                                |
 | [MQLib.jl](https://github.com/JuliaQUBO/MQLib.jl)                                         | `MQLib.Optimizer`                     | [`src/MQLib.jl`](https://github.com/JuliaQUBO/MQLib.jl/blob/main/src/MQLib.jl)                                                             |
+| [QUBODecomposition.jl](https://github.com/JuliaQUBO/QUBODecomposition.jl)                 | `QUBODecomposition.Optimizer`         | [`src/optimizer.jl`](https://github.com/JuliaQUBO/QUBODecomposition.jl/blob/main/src/optimizer.jl)                                         |
 | [CIMOptimizer.jl](https://github.com/JuliaQUBO/CIMOptimizer.jl)                           | `CIMOptimizer.Optimizer`              | [`src/CIMOptimizer.jl`](https://github.com/JuliaQUBO/CIMOptimizer.jl/blob/main/src/CIMOptimizer.jl)                                        |
 | [QuantumAnnealingInterface.jl](https://github.com/JuliaQUBO/QuantumAnnealingInterface.jl) | `QuantumAnnealingInterface.Optimizer` | [`src/QuantumAnnealingInterface.jl`](https://github.com/JuliaQUBO/QuantumAnnealingInterface.jl/blob/main/src/QuantumAnnealingInterface.jl) |
+
+### QUBODecomposition
+
+QUBODecomposition is a standalone composite optimizer configured with a
+user-supplied child optimizer factory and an explicit free logical-variable
+budget, `max_variables`, including isolated variables. It dispatches fitting
+models whole, solves fitting disconnected components, and uses conditioned
+serial neighborhood sweeps for oversized connected components under the default
+`:components_then_sweeps` strategy. Sweeps return heuristic incumbents; exact
+child solves do not certify a coupled global optimum. Strict `:whole_model` and
+`:components` strategies reject oversized nonconstant inputs or components.
+
+As of October 8, 2026, the package is under development, with no published release
+or General registration verified. Use its
+[canonical development manual](https://juliaqubo.github.io/QUBODecomposition.jl/dev/)
+for source-based installation,
+[configuration](https://juliaqubo.github.io/QUBODecomposition.jl/dev/configuration/),
+algorithms and released ToQUBO 0.7.1 integration. See also
+[Public composition pattern](@ref), [Composite accounting](@ref), and
+[Composite conformance evidence](@ref). QUBODrivers does not depend on this
+external package.
