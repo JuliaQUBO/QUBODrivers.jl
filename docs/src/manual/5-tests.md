@@ -103,6 +103,49 @@ traits, including [`QUBODrivers.validate_metadata`](@ref),
 [`QUBODrivers.honors_final_reads`](@ref), and
 [`QUBODrivers.enforces_time_limit`](@ref).
 
+## Composite conformance evidence
+
+Run every default group through the public entry point for each supported
+child/configuration path. A successful tiny conformance model checks the driver
+contract; it does not establish all decomposition algorithms or failure cases.
+For a composite, supplement it with independent objective/reconstruction
+oracles, controlled failed children and repeated solves with changed model data.
+
+QUBODecomposition revision
+[`7f7ea818fad9af229c3d871efdc3e1e679953aeb`](https://github.com/JuliaQUBO/QUBODecomposition.jl/tree/7f7ea818fad9af229c3d871efdc3e1e679953aeb)
+provides concrete evidence using existing released interfaces. Its
+[`test/conformance.jl`](https://github.com/JuliaQUBO/QUBODecomposition.jl/blob/7f7ea818fad9af229c3d871efdc3e1e679953aeb/test/conformance.jl)
+runs `QUBODrivers.test(config!, QUBODecomposition.Optimizer)` for both a controlled
+public exact child and released `ExactSampler`, each at budgets 32 (fitting)
+and 2 (serial). `Test` is loaded by
+[`test/runtime_floor.jl`](https://github.com/JuliaQUBO/QUBODecomposition.jl/blob/7f7ea818fad9af229c3d871efdc3e1e679953aeb/test/runtime_floor.jl)
+to activate the extension; no group is disabled and no internal extension
+module is called. Interface, fixed-variable and example tests run alongside
+metadata, timing, seed determinism, reads, time-limit acceptance and termination
+checks. Passing time-limit acceptance does not prove a hard deadline.
+
+| Contract surface | Additional downstream regression evidence at that revision |
+| --- | --- |
+| Complete states, original objectives, empty/failed/malformed results, duplicate rows and public statuses | [`test/unit/results.jl`](https://github.com/JuliaQUBO/QUBODecomposition.jl/blob/7f7ea818fad9af229c3d871efdc3e1e679953aeb/test/unit/results.jl) |
+| Candidate/call caps, zero budgets, child limits, overruns and seed support | [`test/unit/budgets.jl`](https://github.com/JuliaQUBO/QUBODecomposition.jl/blob/7f7ea818fad9af229c3d871efdc3e1e679953aeb/test/unit/budgets.jl) |
+| Changed labels, domain, sense, scale, offset and coefficients; stale-result invalidation | [`test/unit/repeated_solves.jl`](https://github.com/JuliaQUBO/QUBODecomposition.jl/blob/7f7ea818fad9af229c3d871efdc3e1e679953aeb/test/unit/repeated_solves.jl) |
+| Components, conditioned sweeps, transactional scans, changed graph/plans, multiplicities, disjoint timing and a coupled heuristic gap | [`test/unit/serial.jl`](https://github.com/JuliaQUBO/QUBODecomposition.jl/blob/7f7ea818fad9af229c3d871efdc3e1e679953aeb/test/unit/serial.jl) |
+
+The downstream
+[acceptance manual](https://juliaqubo.github.io/QUBODecomposition.jl/dev/acceptance/)
+maps the broader integration matrix and remaining release/fresh-install work.
+Its [CI workflow at the audited revision](https://github.com/JuliaQUBO/QUBODecomposition.jl/blob/7f7ea818fad9af229c3d871efdc3e1e679953aeb/.github/workflows/ci.yml)
+runs Julia 1.10/current on Linux and current Julia on Windows, plus released
+ToQUBO 0.7.1 and dependency-floor lanes. The floor lane pins QUBODrivers 0.6.5,
+QUBOTools 0.16.2 and MOI 1.0.0 and runs the entire runtime/conformance suite;
+JuMP integration runs in compatible lanes. Consult exact-revision CI results
+and resolved versions when reusing this evidence.
+
+This consumer needs no new upstream public hook or runtime dependency. Its
+algorithms, registration/release and ecosystem aggregation remain owned by
+their respective packages. Discover it in [External Sampler Packages](@ref)
+and use [Composite accounting](@ref) for metadata interpretation.
+
 ```@docs
 QUBODrivers.test
 ```

@@ -197,6 +197,54 @@ a setup function or disable example problems as shown in [Test Suite](@ref).
 Keep backend integration tests separate when they require secrets, paid hardware,
 or long runtimes.
 
+## Public composition pattern
+
+A composite sampler can implement [`QUBODrivers.sample`](@ref) and the public
+[`QUBODrivers.set_model!`](@ref) hook, using `@setup` for its optimizer or for
+model storage. Read the backing model through `QUBOTools.backend` and public
+model queries. Keep decomposition policy in the standalone package.
+
+Accept a zero-argument factory that constructs a fresh, empty child optimizer
+for each call. Configure child-specific attributes inside that factory through
+`MOI.set`, `MOI.RawOptimizerAttribute`, or `MOI.OptimizerWithAttributes`; use
+`MOI.instantiate` when a wrapper needs bridges. Check support for the domain,
+objective and attributes required by the child contract.
+
+```@example composition-factory
+using QUBODrivers
+import MathOptInterface as MOI
+
+child_factory = () -> QUBODrivers.ExactSampler.Optimizer()
+child = child_factory()
+(child isa MOI.AbstractOptimizer, MOI.is_empty(child))
+```
+
+Copy each child problem with `MOI.copy_to` and retain its returned index map for
+`MOI.VariablePrimal` queries. Explicitly include isolated variables. Reconstruct
+complete global assignments, including fixed variables, and independently
+evaluate the original model objective with its sense, domain, scale and offset.
+Child-reported objectives alone cannot validate reconstruction. For ToQUBO,
+this original model is the compiled QUBO; source feasibility and source objective
+evaluation remain a separate compiler/user responsibility.
+
+Use public `MOI.ResultCount`, `MOI.PrimalStatus`, `MOI.TerminationStatus`, and
+result queries to validate a child before committing its candidates. A raw
+metadata status string is diagnostic, not a certificate: released ExactSampler
+returns `LOCALLY_SOLVED` even though its raw status is `"optimal"`. Independent
+component certificates require valid public `OPTIMAL` results for every
+component; exact neighborhood solves in coupled sweeps do not prove a global
+optimum. Preserve limits, interruptions and failures conservatively, exposing
+only validated results and clearing stale results/proofs on a new invocation.
+
+[QUBODecomposition's public implementation](https://github.com/JuliaQUBO/QUBODecomposition.jl/blob/7f7ea818fad9af229c3d871efdc3e1e679953aeb/src/optimizer.jl)
+demonstrates this pattern using released QUBODrivers 0.6.5 and QUBOTools 0.16.2
+interfaces. No new upstream hook, schema or routing trait is needed for this
+consumer. Its
+[whole-model example](https://github.com/JuliaQUBO/QUBODecomposition.jl/blob/7f7ea818fad9af229c3d871efdc3e1e679953aeb/examples/whole_model.jl)
+and [serial example](https://github.com/JuliaQUBO/QUBODecomposition.jl/blob/7f7ea818fad9af229c3d871efdc3e1e679953aeb/examples/serial_sweeps.jl)
+show factory/budget configuration. See [Composite accounting](@ref) for metadata
+and [Composite conformance evidence](@ref) for the audited tests.
+
 ### Continuous integration and maintenance
 
 Use CI to exercise the package on the Julia versions in `[compat]`. A typical
