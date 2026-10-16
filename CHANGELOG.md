@@ -1,6 +1,24 @@
 # Changelog
 
-## Unreleased
+## v0.6.6 - 2026-10-15
+
+### Fixed
+
+- Report completed exhaustive ExactSampler solves as public `MOI.OPTIMAL`,
+  consistently with their result metadata. Clear previous results before repeated
+  calls, and retain conservative statuses after failures or sample transformations.
+  Annotation-only callbacks preserve the exhaustive certificate.
+- Correct the integration guide's description of the old status mismatch and
+  cover public status, lifecycle and numeric/domain/sense cases in regressions.
+
+### Documentation and maintenance
+
+- Document public composite-sampler contracts and the QUBODecomposition integration,
+  preserving the distinction between exact child solves and heuristic outer search.
+- Link the published QUBO.jl article and maintain CI coverage, dependency checks,
+  action versions and guarded Dependabot automation.
+- Align the Random standard-library requirement with the existing Julia 1.10 floor
+  and retain compatible Test requirements.
 
 ## v0.6.5 - 2026-06-25
 
