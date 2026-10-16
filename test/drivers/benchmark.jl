@@ -40,7 +40,7 @@ function test_benchmark_helper()
               exact.best_state ≈ [1.0, 0.0, 0.0]
         @test exact.solve_time >= 0
         @test exact.wall_time >= 0
-        @test exact.termination_status == MOI.LOCALLY_SOLVED
+        @test exact.termination_status == MOI.OPTIMAL
         @test exact.raw_status == "optimal"
 
         random = QUBODrivers.benchmark(RandomSampler.Optimizer) do model

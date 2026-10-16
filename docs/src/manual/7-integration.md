@@ -229,8 +229,12 @@ evaluation remain a separate compiler/user responsibility.
 
 Use public `MOI.ResultCount`, `MOI.PrimalStatus`, `MOI.TerminationStatus`, and
 result queries to validate a child before committing its candidates. A raw
-metadata status string is diagnostic, not a certificate: released ExactSampler
-returns `LOCALLY_SOLVED` even though its raw status is `"optimal"`. Independent
+metadata status string is diagnostic, not a certificate. A completed exhaustive
+ExactSampler solve exposes public `OPTIMAL`; failed solves and transformed
+post-sample results do not retain that certificate. QUBODrivers 0.6.5 and earlier
+returned `LOCALLY_SOLVED` despite exhaustive completion; this was a public-status
+defect, not an intended algorithm limitation. Consumers using that release must
+retain its observed status until adopting a version containing the fix. Independent
 component certificates require valid public `OPTIMAL` results for every
 component; exact neighborhood solves in coupled sweeps do not prove a global
 optimum. Preserve limits, interruptions and failures conservatively, exposing

@@ -15,7 +15,9 @@ It is useful as a correctness oracle for small QUBO and Ising models.
     intended only for small instances.
 
 `ExactSampler` ignores `QUBODrivers.FinalNumberOfReads`; it always returns the
-full exhaustive sample set.
+full exhaustive sample set. A completed solve exposes `MOI.OPTIMAL` through
+`MOI.TerminationStatus()`. Post-sample transformations do not retain that
+certificate; annotation-only callbacks preserve it.
 """
 QUBODrivers.@setup Optimizer begin
     name    = "Exact Sampler"
@@ -23,6 +25,26 @@ QUBODrivers.@setup Optimizer begin
 end
 
 QUBODrivers.honors_final_reads(::Type{<:Optimizer}) = false
+
+function MOI.optimize!(sampler::Optimizer{T}) where {T}
+    # A failed repeated solve must not expose the previous exhaustive result.
+    QUBOTools.attach!(sampler, SampleSet{T,Int}(;
+        metadata = Dict{String,Any}("status" => "sampling"),
+        sense = QUBOTools.sense(sampler), domain = QUBOTools.domain(sampler)))
+    return QUBODrivers._sample!(sampler)
+end
+
+function MOI.get(sampler::Optimizer{T}, attr::MOI.TerminationStatus) where {T}
+    samples = QUBOTools.solution(sampler)
+    metadata = QUBOTools.metadata(samples)
+    if !isempty(samples) && get(metadata, "termination_status", nothing) === MOI.OPTIMAL
+        postprocess = get(metadata, "postprocess", nothing)
+        callback = postprocess isa AbstractDict ? get(postprocess, "callback", nothing) : nothing
+        transformed = callback isa AbstractDict && get(callback, "transformed", false) === true
+        transformed || return MOI.OPTIMAL
+    end
+    return invoke(MOI.get, Tuple{QUBODrivers.AbstractSampler{T},MOI.TerminationStatus}, sampler, attr)
+end
 
 sample_state(i::Integer, n::Integer) = digits(Int, i - 1; base = 2, pad = n)
 
