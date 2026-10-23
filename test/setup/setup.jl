@@ -150,6 +150,11 @@ function test_capability_traits()
         @test !QUBODrivers.enforces_time_limit(ExactSampler.Optimizer)
         @test !QUBODrivers.enforces_time_limit(IdentitySampler.Optimizer)
         @test !QUBODrivers.enforces_time_limit(MIPSampler.Optimizer)
+
+        @test !QUBODrivers.supports_polynomial_objective(RandomSampler.Optimizer)
+        @test !QUBODrivers.supports_polynomial_objective(ExactSampler.Optimizer)
+        @test !QUBODrivers.supports_polynomial_objective(IdentitySampler.Optimizer)
+        @test !QUBODrivers.supports_polynomial_objective(MIPSampler.Optimizer)
     end
 
     return nothing

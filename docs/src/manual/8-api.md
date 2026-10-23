@@ -37,6 +37,14 @@ QUBODrivers.validate_metadata
 QUBODrivers.supports_seed
 QUBODrivers.honors_final_reads
 QUBODrivers.enforces_time_limit
+QUBODrivers.supports_polynomial_objective
+QUBODrivers.polynomial_objective
+QUBODrivers.polynomial_function
+QUBODrivers.polynomial_type
+QUBODrivers.ScalarPolynomialFunction
+QUBODrivers.ToPolynomialBridge
+QUBODrivers.NLToPolynomial
+QUBODrivers.InvalidNLExpression
 QUBODrivers.RawSamplerAttribute
 QUBODrivers.@raw_attr_str
 QUBODrivers.get_raw_attr

@@ -23,6 +23,11 @@ MOI.supports(
     ::MOI.ObjectiveFunction{<:Union{SQF{T},SAF{T},VI}},
 ) where {T} = true
 
+MOI.supports(
+    sampler::AbstractSampler{T},
+    ::MOI.ObjectiveFunction{<:Union{MOI.ScalarNonlinearFunction,ScalarPolynomialFunction{T}}},
+) where {T} = supports_polynomial_objective(sampler)
+
 # By default, all samplers are their own raw solvers.
 MOI.get(sampler::AbstractSampler{T}, ::MOI.RawSolver) where {T} = sampler
 
@@ -43,10 +48,21 @@ MOI.get(::AbstractSampler{T}, ::MOI.DualStatus) where {T} = MOI.NO_SOLUTION
 
 const _MOI_VARIABLES_KEY = Symbol("QUBODrivers/moi_variables")
 const _FIXED_VARIABLES_KEY = Symbol("QUBODrivers/fixed_variables")
+const _POLYNOMIAL_OBJECTIVE_KEY = Symbol("QUBODrivers/polynomial_objective")
+const _POLYNOMIAL_OBJECTIVE_FALLBACK = WeakKeyDict{AbstractSampler,Any}()
+const _POLYNOMIAL_OBJECTIVE_LOCK = ReentrantLock()
 
 struct _FixedVariable{T}
     value::T
     set_type::DataType
+end
+
+struct _PolynomialObjective{T}
+    polynomial::PolyType{T}
+    variables::Vector{VI}
+    sense::QUBOTools.Sense
+    domain::QUBOTools.Domain
+    is_higher_order::Bool
 end
 
 _fixed_value(fixed_variables::AbstractDict{VI,T}, vi::VI) where {T<:Real} = fixed_variables[vi]
@@ -58,6 +74,7 @@ function MOI.empty!(sampler::AbstractSampler{T}) where {T}
     QUBODrivers.set_model!(sampler, QUBOTools.Model{VI,T,Int}())
     _store_moi_variables!(sampler, VI[])
     _store_fixed_variables!(sampler, Dict{VI,_FixedVariable{T}}())
+    _store_polynomial_objective!(sampler, nothing)
 
     return sampler
 end
@@ -77,9 +94,16 @@ function MOI.copy_to(sampler::AbstractSampler{T}, src::MOI.ModelLike) where {T}
     _store_moi_variables!(sampler, variables)
     _store_fixed_variables!(sampler, fixed_variables)
 
-    model = isempty(fixed_variables) ? QUBOTools.Model{T}(src) :
-        _build_model_with_fixed_variables(T, src, variables, fixed_variables)
-    QUBODrivers.set_model!(sampler, model)
+    if supports_polynomial_objective(sampler)
+        model, poly_obj = _build_polynomial_sampler_model(T, src, variables, fixed_variables)
+        QUBODrivers.set_model!(sampler, model)
+        _store_polynomial_objective!(sampler, poly_obj)
+    else
+        _store_polynomial_objective!(sampler, nothing)
+        model = isempty(fixed_variables) ? QUBOTools.Model{T}(src) :
+            _build_model_with_fixed_variables(T, src, variables, fixed_variables)
+        QUBODrivers.set_model!(sampler, model)
+    end
 
     # VariablePrimalStart is advisory; tolerate source models that reject it.
     if MOI.supports(src, MOI.VariablePrimalStart(), VI)
@@ -94,7 +118,12 @@ function MOI.copy_to(sampler::AbstractSampler{T}, src::MOI.ModelLike) where {T}
                 MOI.set(sampler, MOI.VariablePrimalStart(), v, x)
             end
         catch err
-            if !(err isa MOI.GetAttributeNotAllowed{MOI.VariablePrimalStart})
+            if !(
+                err isa Union{
+                    MOI.GetAttributeNotAllowed{MOI.VariablePrimalStart},
+                    MOI.UnsupportedAttribute{MOI.VariablePrimalStart},
+                }
+            )
                 rethrow()
             end
         end
@@ -148,6 +177,126 @@ function _get_fixed_variables(sampler::AbstractSampler{T}) where {T}
     end
 
     return Dict{VI,_FixedVariable{T}}()
+end
+
+function _store_polynomial_objective!(
+    sampler::AbstractSampler{T},
+    poly_obj::Union{Nothing,_PolynomialObjective{T}},
+) where {T}
+    if hasfield(typeof(sampler), :polynomial_objective)
+        sampler.polynomial_objective = poly_obj
+    elseif hasfield(typeof(sampler), :attributes) && isa(sampler.attributes, Dict)
+        sampler.attributes[_POLYNOMIAL_OBJECTIVE_KEY] = poly_obj
+    else
+        @lock _POLYNOMIAL_OBJECTIVE_LOCK begin
+            if isnothing(poly_obj)
+                delete!(_POLYNOMIAL_OBJECTIVE_FALLBACK, sampler)
+            else
+                _POLYNOMIAL_OBJECTIVE_FALLBACK[sampler] = poly_obj
+            end
+        end
+    end
+
+    return nothing
+end
+
+function _get_polynomial_objective(
+    sampler::AbstractSampler{T},
+)::Union{Nothing,_PolynomialObjective{T}} where {T}
+    if hasfield(typeof(sampler), :polynomial_objective)
+        return sampler.polynomial_objective::Union{Nothing,_PolynomialObjective{T}}
+    elseif hasfield(typeof(sampler), :attributes) &&
+       isa(sampler.attributes, Dict) &&
+       haskey(sampler.attributes, _POLYNOMIAL_OBJECTIVE_KEY)
+        return sampler.attributes[_POLYNOMIAL_OBJECTIVE_KEY]::Union{Nothing,_PolynomialObjective{T}}
+    end
+
+    return @lock _POLYNOMIAL_OBJECTIVE_LOCK begin
+        get(_POLYNOMIAL_OBJECTIVE_FALLBACK, sampler, nothing)::Union{Nothing,_PolynomialObjective{T}}
+    end
+end
+
+function _has_higher_order_polynomial_objective(sampler::AbstractSampler)
+    poly_obj = _get_polynomial_objective(sampler)
+    return !isnothing(poly_obj) && poly_obj.is_higher_order
+end
+
+function _polynomial_objective_degree(sampler::AbstractSampler)
+    poly_obj = _get_polynomial_objective(sampler)
+    return isnothing(poly_obj) ? 0 : MP.maxdegree(poly_obj.polynomial)
+end
+
+@doc raw"""
+    polynomial_objective(
+        sampler::AbstractSampler{T};
+        sense::Union{Symbol,QUBOTools.Sense,Nothing} = nothing,
+        domain::Union{Symbol,QUBOTools.Domain,Nothing} = nothing,
+    )::MP.AbstractPolynomial{T} where {T}
+
+Return the objective polynomial stored on an opted-in `sampler` as a
+`MultivariatePolynomials.AbstractPolynomial{T}` over the free variables in
+`QUBOTools.variables(sampler)` order, preserving constant offset and fixed
+variable reductions.
+
+If `sense` (`:min` or `:max`) or `domain` (`:bool` or `:spin`) is provided, the
+polynomial is cast to the requested optimization sense and variable domain.
+
+Throws an `ArgumentError` if `supports_polynomial_objective(sampler)` is `false`.
+"""
+function polynomial_objective(
+    sampler::AbstractSampler{T};
+    sense::Union{Symbol,QUBOTools.Sense,Nothing} = nothing,
+    domain::Union{Symbol,QUBOTools.Domain,Nothing} = nothing,
+) where {T}
+    if !supports_polynomial_objective(sampler)
+        throw(
+            ArgumentError(
+                "Sampler `$(typeof(sampler))` does not opt into polynomial objectives; " *
+                "define `QUBODrivers.supports_polynomial_objective(::Type{<:$(typeof(sampler))}) = true` " *
+                "to enable polynomial objective support.",
+            ),
+        )
+    end
+
+    poly_obj = _get_polynomial_objective(sampler)
+    isnothing(poly_obj) && return zero(PolyType{T})
+
+    p = poly_obj.polynomial
+    vars = MP.variables(p)
+    zero_anchor = sum(zero(T) * v for v in vars; init = zero(PolyType{T}))
+
+    if !isnothing(domain)
+        target_domain = QUBOTools.domain(domain)
+        if target_domain !== poly_obj.domain && !isempty(vars)
+            if poly_obj.domain === QUBOTools.BoolDomain && target_domain === QUBOTools.SpinDomain
+                subs_exprs = PolyType{T}[convert(PolyType{T}, (one(T) + v) / 2) for v in vars]
+                p = convert(PolyType{T}, p(vars => subs_exprs)) + zero_anchor
+            elseif poly_obj.domain === QUBOTools.SpinDomain && target_domain === QUBOTools.BoolDomain
+                subs_exprs = PolyType{T}[convert(PolyType{T}, 2 * v - one(T)) for v in vars]
+                p = convert(PolyType{T}, p(vars => subs_exprs)) + zero_anchor
+            end
+        end
+    end
+
+    if !isnothing(sense)
+        target_sense = QUBOTools.sense(sense)
+        if target_sense !== poly_obj.sense
+            p = -p + zero_anchor
+        end
+    end
+
+    return p
+end
+
+function polynomial_function(
+    sampler::AbstractSampler{T};
+    sense::Union{Symbol,QUBOTools.Sense,Nothing} = nothing,
+    domain::Union{Symbol,QUBOTools.Domain,Nothing} = nothing,
+) where {T}
+    p = polynomial_objective(sampler; sense, domain)
+    poly_obj = _get_polynomial_objective(sampler)
+    vars = isnothing(poly_obj) ? VI[] : copy(poly_obj.variables)
+    return ScalarPolynomialFunction{T,typeof(p)}(p, vars)
 end
 
 function _fixed_constraint_variables(sampler::AbstractSampler{T}, ::Type{S}) where {T,S<:Real}
@@ -371,12 +520,215 @@ function _accumulate_quadratic_term!(
     return offset
 end
 
+function _validate_unconstrained_moi_model(
+    src::MOI.ModelLike;
+    allow_polynomial_objective::Bool = false,
+)
+    sense = MOI.get(src, MOI.ObjectiveSense())
+    if !(sense === MOI.MIN_SENSE || sense === MOI.MAX_SENSE)
+        QUBOTools_MOI.qubo_parsing_error(
+            """
+            The provided model has an invalid optimization sense.
+            It should be either minimization or maximization.
+            """,
+        )
+    end
+
+    F_obj = MOI.get(src, MOI.ObjectiveFunctionType())
+    is_quadratic = (F_obj <: SQF || F_obj <: SAF || F_obj <: VI)
+    is_polynomial = is_quadratic ||
+        (F_obj <: MOI.ScalarNonlinearFunction || F_obj <: ScalarPolynomialFunction)
+
+    if !(allow_polynomial_objective ? is_polynomial : is_quadratic)
+        QUBOTools_MOI.qubo_parsing_error(
+            "The provided model's objective function is not a quadratic polynomial.\n",
+        )
+    end
+
+    for (F, S) in MOI.get(src, MOI.ListOfConstraintTypesPresent())
+        if F === VI && (S ∈ (MOI.ZeroOne, Spin) || S <: MOI.EqualTo)
+            continue
+        end
+        QUBOTools_MOI.qubo_parsing_error("The provided model is not unconstrained.\n")
+    end
+
+    return nothing
+end
+
+function _variable_symbol(src::MOI.ModelLike, vi::VI)
+    name = try
+        MOI.get(src, MOI.VariableName(), vi)
+    catch err
+        if err isa Union{MOI.UnsupportedAttribute,MOI.GetAttributeNotAllowed}
+            ""
+        else
+            rethrow()
+        end
+    end
+
+    return isempty(name) ? Symbol("x[$(vi.value)]") : Symbol(name)
+end
+
+function _build_quadratic_model_from_polynomial(
+    ::Type{T},
+    poly::PolyType{T},
+    free_variables::Vector{VI},
+    poly_vars::Vector{VarType};
+    sense::QUBOTools.Sense,
+    domain::Symbol,
+) where {T}
+    var_lookup = Dict{VarType,VI}(poly_vars[i] => free_variables[i] for i in eachindex(free_variables))
+    linear_terms = Dict{VI,T}(vi => zero(T) for vi in free_variables)
+    quadratic_terms = Dict{Tuple{VI,VI},T}()
+    offset = zero(T)
+
+    for term in MP.terms(poly)
+        coef = convert(T, MP.coefficient(term))
+        iszero(coef) && continue
+        mono = MP.monomial(term)
+        deg = MP.degree(mono)
+
+        if deg == 0
+            offset += coef
+        elseif deg == 1
+            for (pv, exp) in MP.powers(mono)
+                if exp == 1
+                    vi = var_lookup[pv]
+                    linear_terms[vi] = get(linear_terms, vi, zero(T)) + coef
+                end
+            end
+        elseif deg == 2
+            active = Tuple{VI,Int}[
+                (var_lookup[pv], exp) for (pv, exp) in MP.powers(mono) if exp > 0
+            ]
+            if length(active) == 1
+                vi, _ = only(active)
+                if domain === :bool
+                    linear_terms[vi] = get(linear_terms, vi, zero(T)) + coef
+                else
+                    offset += coef
+                end
+            else
+                (xi, _), (xj, _) = active[1], active[2]
+                if xi.value > xj.value
+                    xi, xj = xj, xi
+                end
+                quadratic_terms[(xi, xj)] = get(quadratic_terms, (xi, xj), zero(T)) + coef
+            end
+        else
+            error("Expected polynomial degree <= 2, got degree $deg")
+        end
+    end
+
+    return QUBOTools.Model{VI,T,Int}(
+        Set{VI}(free_variables),
+        linear_terms,
+        quadratic_terms;
+        offset = offset,
+        sense  = sense,
+        domain = domain,
+    )
+end
+
+function _build_polynomial_sampler_model(
+    ::Type{T},
+    src::MOI.ModelLike,
+    variables::Vector{VI},
+    fixed_variables,
+) where {T}
+    if MOI.is_empty(src)
+        model = QUBOTools.Model{VI,T,Int}(; sense = :min, domain = :bool)
+        poly_obj = _PolynomialObjective{T}(
+            zero(PolyType{T}),
+            VI[],
+            QUBOTools.Min,
+            QUBOTools.BoolDomain,
+            false,
+        )
+        return model, poly_obj
+    end
+
+    _validate_unconstrained_moi_model(src; allow_polynomial_objective = true)
+
+    variable_set = Set{VI}(variables)
+    domain_sym = _variable_domain(src, variable_set)
+    sense_qt = QUBOTools.sense(MOI.get(src, MOI.ObjectiveSense()))
+    domain_qt = QUBOTools.domain(domain_sym)
+
+    free_variables = sort!(
+        VI[v for v in variables if !haskey(fixed_variables, v)];
+        by = v -> v.value,
+    )
+    poly_vars = VarType[
+        MP.similar_variable(VarType, _variable_symbol(src, vi)) for vi in free_variables
+    ]
+    free_var_map = Dict{VI,VarType}(
+        free_variables[i] => poly_vars[i] for i in eachindex(free_variables)
+    )
+
+    F = MOI.get(src, MOI.ObjectiveFunctionType())
+    f = MOI.get(src, MOI.ObjectiveFunction{F}())
+    spf = f isa ScalarPolynomialFunction ? f : convert(FuncType{T}, f)
+
+    subs_targets = PolyType{T}[
+        haskey(fixed_variables, vi) ?
+            convert(PolyType{T}, _fixed_value(fixed_variables, vi)) :
+            convert(PolyType{T}, free_var_map[vi])
+        for vi in spf.variables
+    ]
+    raw_poly = isempty(spf.variables) ?
+        convert(PolyType{T}, spf.polynomial) :
+        convert(PolyType{T}, spf.polynomial(MP.variables(spf.polynomial) => subs_targets))
+    zero_anchor = sum(zero(T) * pv for pv in poly_vars; init = zero(PolyType{T}))
+    poly = raw_poly + zero_anchor
+
+    if F <: Union{VI,SAF,SQF}
+        model = isempty(fixed_variables) ? QUBOTools.Model{T}(src) :
+            _build_model_with_fixed_variables(T, src, variables, fixed_variables)
+        is_higher_order = false
+    elseif MP.maxdegree(poly) <= 2
+        model = _build_quadratic_model_from_polynomial(
+            T,
+            poly,
+            free_variables,
+            poly_vars;
+            sense  = sense_qt,
+            domain = domain_sym,
+        )
+        is_higher_order = false
+    else
+        linear_terms = Dict{VI,T}(vi => zero(T) for vi in free_variables)
+        quadratic_terms = Dict{Tuple{VI,VI},T}()
+        offset = convert(T, _constant_coefficient(poly))
+        model = QUBOTools.Model{VI,T,Int}(
+            Set{VI}(free_variables),
+            linear_terms,
+            quadratic_terms;
+            offset = offset,
+            sense  = sense_qt,
+            domain = domain_sym,
+        )
+        is_higher_order = true
+    end
+
+    poly_obj = _PolynomialObjective{T}(
+        poly,
+        free_variables,
+        sense_qt,
+        domain_qt,
+        is_higher_order,
+    )
+
+    return model, poly_obj
+end
+
 function _build_model_with_fixed_variables(
     ::Type{T},
     src::MOI.ModelLike,
     variables::Vector{VI},
     fixed_variables,
 ) where {T}
+    _validate_unconstrained_moi_model(src; allow_polynomial_objective = false)
     variable_set = Set{VI}(variables)
     free_variables = Set{VI}(filter(v -> !haskey(fixed_variables, v), variables))
     domain = _variable_domain(src, variable_set)
