@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.6.7 - 2026-10-23
+
+### Added
+
+- Port PolyJuMP's MOI-to-polynomial bridge (`ScalarPolynomialFunction`,
+  `ToPolynomialBridge`, `NLToPolynomial`, `polynomial_objective`,
+  `polynomial_function`, and `supports_polynomial_objective`) as a shared
+  polynomial objective surface for opted-in drivers (#82, #100).
+- Add the non-binary finite variable domain contract (`VariableEncodingSet`,
+  `variable_domain`, `variable_domains`, `num_levels`, `values_to_levels`,
+  `levels_to_values`, `@setup` domain capability traits, and $0$-based integer
+  level polynomial shifting) for qudit and integer value sets (#83, #103).
+
+### Fixed
+
+- Preserve `MIPSampler` objective bounds (`MOI.ObjectiveBound`,
+  `MOI.RelativeGap`) and termination statuses when the backend stops without an
+  incumbent (#96, #102).
+
+### Documentation and maintenance
+
+- Standardize citation metadata (`CITATION.cff`, `CITATION.bib`) and add
+  automated Zenodo release archive verification (#77, #101).
+
 ## v0.6.6 - 2026-10-15
 
 ### Fixed

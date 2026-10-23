@@ -26,8 +26,8 @@ abstract: >-
 repository-code: "https://github.com/JuliaQUBO/QUBODrivers.jl"
 url: "https://juliaqubo.github.io/QUBODrivers.jl/"
 license: MPL-2.0
-version: "0.6.6"
-date-released: 2026-10-15
+version: "0.6.7"
+date-released: 2026-10-23
 doi: "10.5281/zenodo.7811951"
 identifiers:
   - type: doi
