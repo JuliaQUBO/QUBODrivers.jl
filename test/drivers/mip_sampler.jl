@@ -1431,6 +1431,211 @@ function _test_mip_sampler_state_invalidation()
         @test MOI.get(sampler, MOI.PrimalStatus()) == MOI.NO_SOLUTION
         @test MOI.get(sampler, MOI.ObjectiveBound()) ≈ -4.0
         @test_throws MOI.GetAttributeNotAllowed MOI.get(sampler, MOI.RelativeGap())
+
+        # 3. Large-array (>= 8,192 entries) linear and quadratic storage mutation regressions
+        #    (verifying _hash_vector does not skip entries like Base.hash(::AbstractArray))
+        n_large = 8192
+        large_vars = [VI(i) for i in 1:n_large]
+        L_large = Dict{VI,Float64}(VI(i) => Float64(i) for i in 1:n_large)
+        Q_large = Dict{Tuple{VI,VI},Float64}((VI(1), VI(j)) => Float64(j) for j in 2:n_large)
+        Q_large[(VI(2), VI(3))] = 1.0
+        qt_large = QUBOTools.Model{VI,Float64,Int}(
+            Set{VI}(large_vars),
+            L_large,
+            Q_large;
+            sense  = :min,
+            domain = :bool,
+        )
+        large_sampler = MIPSampler.Optimizer{Float64}()
+        QUBODrivers.set_model!(large_sampler, qt_large)
+        QUBODrivers._store_moi_variables!(large_sampler, large_vars)
+        QUBODrivers._store_fixed_variables!(large_sampler, Dict{VI,QUBODrivers._FixedVariable{Float64}}())
+        @test length(large_sampler.model.form.L.data.nzval) == n_large
+        @test length(large_sampler.model.form.Q.data.nzval) == n_large
+
+        MOI.set(
+            large_sampler,
+            MIPSampler.MIPOptimizer(),
+            () -> MIPControlledBackend(
+                termination_status = MOI.OPTIMAL,
+                primal_status      = MOI.FEASIBLE_POINT,
+                primal_values      = zeros(Float64, n_large),
+                objective_bound    = 0.0,
+                relative_gap       = 0.0,
+            ),
+        )
+        MOI.optimize!(large_sampler)
+        @test MOI.get(large_sampler, MOI.TerminationStatus()) == MOI.OPTIMAL
+        @test MOI.get(large_sampler, MOI.ResultCount()) == 1
+        @test MOI.get(large_sampler, MOI.ObjectiveBound()) ≈ 0.0
+        @test MOI.get(large_sampler, MOI.VariablePrimal(1), large_vars) == zeros(Float64, n_large)
+
+        # Direct mutation of entry 1 in 8,192-element linear storage array invalidates immediately
+        orig_l1 = large_sampler.model.form.L.data.nzval[1]
+        large_sampler.model.form.L.data.nzval[1] = -10000.0
+        @test isempty(QUBOTools.solution(large_sampler))
+        @test isempty(QUBOTools.metadata(QUBOTools.solution(large_sampler)))
+        @test MOI.get(large_sampler, MOI.TerminationStatus()) == MOI.OPTIMIZE_NOT_CALLED
+        @test MOI.get(large_sampler, MOI.ResultCount()) == 0
+        @test_throws MOI.GetAttributeNotAllowed MOI.get(large_sampler, MOI.ObjectiveBound())
+        large_sampler.model.form.L.data.nzval[1] = orig_l1
+
+        # Direct mutation of entry 1 in 8,192-element quadratic storage array invalidates immediately
+        MOI.optimize!(large_sampler)
+        @test MOI.get(large_sampler, MOI.TerminationStatus()) == MOI.OPTIMAL
+        orig_q1 = large_sampler.model.form.Q.data.nzval[1]
+        large_sampler.model.form.Q.data.nzval[1] = -10000.0
+        @test isempty(QUBOTools.solution(large_sampler))
+        @test isempty(QUBOTools.metadata(QUBOTools.solution(large_sampler)))
+        @test MOI.get(large_sampler, MOI.TerminationStatus()) == MOI.OPTIMIZE_NOT_CALLED
+        @test MOI.get(large_sampler, MOI.ResultCount()) == 0
+        @test_throws MOI.GetAttributeNotAllowed MOI.get(large_sampler, MOI.ObjectiveBound())
+        large_sampler.model.form.Q.data.nzval[1] = orig_q1
+
+        # PostSampleCallback mutation of entry 1 in 8,192-element linear storage array invalidates solve
+        MOI.set(
+            large_sampler,
+            QUBODrivers.PostSampleCallback(),
+            (_, s) -> (s.model.form.L.data.nzval[1] = -10000.0; nothing),
+        )
+        MOI.optimize!(large_sampler)
+        @test isempty(QUBOTools.solution(large_sampler))
+        @test MOI.get(large_sampler, MOI.TerminationStatus()) == MOI.OPTIMIZE_NOT_CALLED
+        @test MOI.get(large_sampler, MOI.ResultCount()) == 0
+        @test_throws MOI.GetAttributeNotAllowed MOI.get(large_sampler, MOI.ObjectiveBound())
+        large_sampler.model.form.L.data.nzval[1] = orig_l1
+
+        # PostSampleCallback mutation of entry 1 in 8,192-element quadratic storage array invalidates solve
+        MOI.set(
+            large_sampler,
+            QUBODrivers.PostSampleCallback(),
+            (_, s) -> (s.model.form.Q.data.nzval[1] = -10000.0; nothing),
+        )
+        MOI.optimize!(large_sampler)
+        @test isempty(QUBOTools.solution(large_sampler))
+        @test MOI.get(large_sampler, MOI.TerminationStatus()) == MOI.OPTIMIZE_NOT_CALLED
+        @test MOI.get(large_sampler, MOI.ResultCount()) == 0
+        @test_throws MOI.GetAttributeNotAllowed MOI.get(large_sampler, MOI.ObjectiveBound())
+        large_sampler.model.form.Q.data.nzval[1] = orig_q1
+
+        # 4. Runnable manual interrupted-solve example (both bound-only and with-incumbent outcomes, plus tm_lim = 0)
+        function solve_interrupted_qubo(stop_reason::Integer)
+            m = JuMP.Model(MIPSampler.Optimizer)
+            JuMP.set_silent(m)
+            JuMP.set_attribute(
+                m,
+                MIPSampler.MIPOptimizer(),
+                () -> begin
+                    opt = GLPK.Optimizer()
+                    GLPK._set_callback(opt, cb_data -> begin
+                        if GLPK.glp_ios_reason(cb_data.tree) == stop_reason
+                            GLPK.glp_ios_terminate(cb_data.tree)
+                        end
+                    end)
+                    return opt
+                end,
+            )
+
+            JuMP.@variable(m, x_var[1:3], Bin)
+            JuMP.@objective(
+                m,
+                Min,
+                -1.25 * (x_var[1] + x_var[2] + x_var[3]) +
+                2.0 * (x_var[1] * x_var[2] + x_var[2] * x_var[3] + x_var[1] * x_var[3]),
+            )
+
+            JuMP.optimize!(m)
+
+            status = JuMP.termination_status(m)
+            bound = try
+                JuMP.objective_bound(m)
+            catch err
+                err isa MOI.GetAttributeNotAllowed ? nothing : rethrow()
+            end
+            raw_metadata = QUBOTools.metadata(QUBOTools.solution(JuMP.unsafe_backend(m)))
+
+            if JuMP.result_count(m) > 0
+                incumbent_val   = JuMP.objective_value(m)
+                incumbent_state = round.(Int, JuMP.value.(x_var))
+                gap = try
+                    JuMP.relative_gap(m)
+                catch err
+                    err isa MOI.GetAttributeNotAllowed ? nothing : rethrow()
+                end
+                return (;
+                    model = m,
+                    x = x_var,
+                    status,
+                    has_incumbent = true,
+                    bound,
+                    incumbent_val,
+                    incumbent_state,
+                    gap,
+                    solve_time = JuMP.solve_time(m),
+                    bound_metadata = raw_metadata["bound"],
+                )
+            else
+                return (;
+                    model = m,
+                    x = x_var,
+                    status,
+                    has_incumbent = false,
+                    bound,
+                    incumbent_val = nothing,
+                    incumbent_state = nothing,
+                    gap = nothing,
+                    solve_time = JuMP.solve_time(m),
+                    bound_metadata = get(raw_metadata, "bound", nothing),
+                )
+            end
+        end
+
+        bound_only = solve_interrupted_qubo(GLPK.GLP_IBRANCH)
+        @test bound_only.status == MOI.INTERRUPTED
+        @test !bound_only.has_incumbent
+        @test bound_only.bound ≈ -1.875
+        @test bound_only.incumbent_val === nothing
+        @test bound_only.incumbent_state === nothing
+        @test bound_only.gap === nothing
+        @test isfinite(bound_only.solve_time) && bound_only.solve_time >= 0.0
+        @test bound_only.bound_metadata["value"] ≈ -1.875
+        @test_throws MOI.ResultIndexBoundsError JuMP.objective_value(bound_only.model)
+        @test_throws MOI.ResultIndexBoundsError JuMP.value.(bound_only.x)
+        @test_throws MOI.GetAttributeNotAllowed JuMP.relative_gap(bound_only.model)
+
+        with_incumbent = solve_interrupted_qubo(GLPK.GLP_IBINGO)
+        @test with_incumbent.status == MOI.INTERRUPTED
+        @test with_incumbent.has_incumbent
+        @test with_incumbent.bound ≈ -1.25
+        @test with_incumbent.incumbent_val ≈ -1.25
+        @test sum(with_incumbent.incumbent_state) == 1
+        @test with_incumbent.gap ≈ 0.0
+        @test isfinite(with_incumbent.solve_time) && with_incumbent.solve_time >= 0.0
+        @test with_incumbent.bound_metadata["value"] ≈ -1.25
+
+        # GLPK with tm_lim = 0 (terminates before node bound is computed -> TIME_LIMIT with unavailable bound)
+        tm0_model = JuMP.Model(MIPSampler.Optimizer)
+        JuMP.set_silent(tm0_model)
+        JuMP.set_attribute(
+            tm0_model,
+            MIPSampler.MIPOptimizer(),
+            JuMP.optimizer_with_attributes(GLPK.Optimizer, "tm_lim" => 0),
+        )
+        JuMP.@variable(tm0_model, tm0_x[1:3], Bin)
+        JuMP.@objective(
+            tm0_model,
+            Min,
+            -1.25 * (tm0_x[1] + tm0_x[2] + tm0_x[3]) +
+            2.0 * (tm0_x[1] * tm0_x[2] + tm0_x[2] * tm0_x[3] + tm0_x[1] * tm0_x[3]),
+        )
+        JuMP.optimize!(tm0_model)
+        @test JuMP.termination_status(tm0_model) == MOI.TIME_LIMIT
+        @test JuMP.result_count(tm0_model) == 0
+        @test JuMP.primal_status(tm0_model) == MOI.NO_SOLUTION
+        @test_throws MOI.GetAttributeNotAllowed JuMP.objective_bound(tm0_model)
+        @test_throws MOI.GetAttributeNotAllowed JuMP.relative_gap(tm0_model)
+        @test_throws MOI.ResultIndexBoundsError JuMP.objective_value(tm0_model)
+        @test_throws MOI.ResultIndexBoundsError JuMP.value.(tm0_x)
     end
 
     return nothing

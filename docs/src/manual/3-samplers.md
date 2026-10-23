@@ -155,29 +155,96 @@ fixed-variable conditioning) separately from any incumbent:
   (or the backend's failure status).
 
 ```julia
-MOI = QUBODrivers.MOI
-set_time_limit_sec(model, 0.001)
+using JuMP
+using QUBODrivers
+using QUBODrivers: QUBOTools
+using GLPK
 
-try
-    optimize!(model)
-catch err
-    # Numerical validation or backend failure: prior results are cleared,
-    # and `termination_status(model)` reflects `MOI.NUMERICAL_ERROR` or `MOI.OTHER_ERROR`.
-    @warn "MIP solve failed" exception = err status = termination_status(model)
+const MOI = JuMP.MOI
+
+function solve_interrupted_qubo(stop_reason::Integer)
+    model = Model(MIPSampler.Optimizer)
+    set_silent(model)
+    set_attribute(
+        model,
+        MIPSampler.MIPOptimizer(),
+        () -> begin
+            opt = GLPK.Optimizer()
+            GLPK._set_callback(opt, cb_data -> begin
+                if GLPK.glp_ios_reason(cb_data.tree) == stop_reason
+                    GLPK.glp_ios_terminate(cb_data.tree)
+                end
+            end)
+            return opt
+        end,
+    )
+
+    @variable(model, x[1:3], Bin)
+    @objective(
+        model,
+        Min,
+        -1.25 * (x[1] + x[2] + x[3]) + 2.0 * (x[1] * x[2] + x[2] * x[3] + x[1] * x[3]),
+    )
+
+    try
+        optimize!(model)
+    catch err
+        # Numerical validation or backend failure: prior results are cleared,
+        # and `termination_status(model)` reflects `MOI.NUMERICAL_ERROR` or `MOI.OTHER_ERROR`.
+        @warn "MIP solve failed" exception = err status = termination_status(model)
+    end
+
+    status = termination_status(model)
+    bound = try
+        objective_bound(model)
+    catch err
+        err isa MOI.GetAttributeNotAllowed ? nothing : rethrow()
+    end
+    raw_metadata = QUBOTools.metadata(QUBOTools.solution(unsafe_backend(model)))
+
+    if result_count(model) > 0
+        incumbent_val   = objective_value(model)
+        incumbent_state = round.(Int, value.(x))
+        gap = try
+            relative_gap(model)
+        catch err
+            err isa MOI.GetAttributeNotAllowed ? nothing : rethrow()
+        end
+        return (;
+            status,
+            has_incumbent = true,
+            bound,
+            incumbent_val,
+            incumbent_state,
+            gap,
+            solve_time = solve_time(model),
+            bound_metadata = raw_metadata["bound"],
+        )
+    else
+        # Primal-free limit termination (`primal_status(model) == MOI.NO_SOLUTION`) or failed solve:
+        # `objective_value(model)` and `value.(x)` throw `MOI.ResultIndexBoundsError`, and
+        # `relative_gap(model)` throws `MOI.GetAttributeNotAllowed`, while `bound` and timing remain available.
+        return (;
+            status,
+            has_incumbent = false,
+            bound,
+            incumbent_val = nothing,
+            incumbent_state = nothing,
+            gap = nothing,
+            solve_time = solve_time(model),
+            bound_metadata = get(raw_metadata, "bound", nothing),
+        )
+    end
 end
 
-status = MOI.get(model, MOI.TerminationStatus())
-raw_metadata = QUBOTools.metadata(QUBOTools.solution(MOI.get(model, MOI.RawSolver())))
-bound = get(raw_metadata, "objective_bound", nothing) # or catch MOI.GetAttributeNotAllowed on MOI.ObjectiveBound()
+# 1. Interrupted at root branching before an integer incumbent is found (bound-only result):
+bound_only = solve_interrupted_qubo(GLPK.GLP_IBRANCH)
+# bound_only.status == MOI.INTERRUPTED, bound_only.has_incumbent == false, bound_only.bound == -1.875
 
-if MOI.get(model, MOI.ResultCount()) > 0
-    incumbent_val   = MOI.get(model, MOI.ObjectiveValue(1))
-    incumbent_state = round.(Int, MOI.get(model, MOI.VariablePrimal(1), backend_variables))
-    gap             = get(raw_metadata, "relative_gap", nothing)
-else
-    # Primal-free limit termination (MOI.PrimalStatus() == MOI.NO_SOLUTION) or failed solve:
-    # no incumbent or finite relative gap, but `bound` (if reported) and timing remain available.
-end
+# 2. Interrupted when the first integer incumbent is found (incumbent + bound result):
+with_incumbent = solve_interrupted_qubo(GLPK.GLP_IBINGO)
+# with_incumbent.status == MOI.INTERRUPTED, with_incumbent.has_incumbent == true,
+# with_incumbent.incumbent_val == -1.25, with_incumbent.bound == -1.25
 ```
 
 !!! note "Bound Scope and Numerical Provenance"

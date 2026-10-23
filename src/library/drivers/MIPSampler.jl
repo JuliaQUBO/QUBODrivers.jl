@@ -187,6 +187,14 @@ const _UNAVAILABLE_ATTRIBUTE_ERRORS = Union{
     MOI.ResultIndexBoundsError,
 }
 
+function _hash_vector(v::AbstractVector, h::UInt64)::UInt64
+    h = hash(length(v), h)
+    @inbounds for x in v
+        h = hash(x, h)
+    end
+    return h
+end
+
 function _hash_form(
     form::QUBOTools.Form{T,QUBOTools.SparseLinearForm{T},QUBOTools.SparseQuadraticForm{T}},
     h::UInt64,
@@ -199,13 +207,13 @@ function _hash_form(
     h = hash(form.frame.sense, h)
     h = hash(form.frame.domain, h)
     h = hash(L_data.n, h)
-    h = hash(L_data.nzind, h)
-    h = hash(L_data.nzval, h)
+    h = _hash_vector(L_data.nzind, h)
+    h = _hash_vector(L_data.nzval, h)
     h = hash(Q_data.m, h)
     h = hash(Q_data.n, h)
-    h = hash(Q_data.colptr, h)
-    h = hash(Q_data.rowval, h)
-    h = hash(Q_data.nzval, h)
+    h = _hash_vector(Q_data.colptr, h)
+    h = _hash_vector(Q_data.rowval, h)
+    h = _hash_vector(Q_data.nzval, h)
     return h
 end
 
@@ -226,13 +234,13 @@ end
 
 function _hash_model(model::QUBOTools.Model{VI,T,Int,F}, h::UInt64)::UInt64 where {T,F}
     h = hash(objectid(model), h)
-    h = hash(model.variable_map.inv, h)
+    h = _hash_vector(model.variable_map.inv, h)
     return _hash_form(model.form, h)
 end
 
 function _solve_scope_signature(sampler::Optimizer{T})::UInt64 where {T}
     h = _hash_model(sampler.model, UInt64(0))
-    h = hash(sampler.moi_variables, h)
+    h = _hash_vector(sampler.moi_variables, h)
     for (vi, fv) in sampler.fixed_variables
         h = xor(h, hash(vi.value, hash(fv.value, objectid(fv.set_type))))
     end
@@ -635,8 +643,18 @@ function _checked_convert(::Type{T}, val::Real, label::AbstractString)::T where 
     return converted
 end
 
-function _extract_raw_min_bound(backend, n::Integer, ::Type{T})::Union{Nothing,T} where {T}
+function _extract_raw_min_bound(
+    backend,
+    n::Integer,
+    has_incumbent::Bool,
+    ::Type{T},
+)::Union{Nothing,T} where {T}
     raw_val = _backend_attribute(backend, MOI.ObjectiveBound())
+    if !isnothing(raw_val) && raw_val isa Real && _backend_attribute(backend, MOI.SolverName()) == "GLPK"
+        if (!has_incumbent && isnan(raw_val)) || raw_val <= -floatmax(Float64)
+            raw_val = -Inf
+        end
+    end
 
     if isnothing(raw_val)
         return nothing
@@ -780,7 +798,7 @@ function QUBODrivers.sample(sampler::Optimizer{T}) where {T}
             push!(samples, Sample{T,Int}(ψ, λ))
         end
 
-        raw_bound = _extract_raw_min_bound(backend, n, T)
+        raw_bound = _extract_raw_min_bound(backend, n, has_incumbent, T)
         if !isnothing(raw_bound) && !isnothing(λ_min)
             _validate_bound_against_incumbent(raw_bound, λ_min)
         end
