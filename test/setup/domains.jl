@@ -82,6 +82,8 @@ function test_finite_variable_domains()
         test_heterogeneous_domains_and_shifting()
         test_domain_validation_and_rejection()
         test_minimal_domain_sampler_fallback()
+        test_moi_constraint_indices_and_bound_introspection()
+        test_exact_integer_precision_and_zero_variable_models()
     end
 
     return nothing
@@ -243,8 +245,10 @@ function test_arbitrary_finite_encoding_sets()
         @test QUBODrivers.levels_to_values(sampler, [2, 0]) == [1, -3]
         @test QUBODrivers.values_to_levels(sampler, [1, -3]) == [2, 0]
 
-        @test MOI.get(sampler, QUBODrivers.VariableEncodingSet(), vx) == [5.0, -2.0, 1.0]
-        @test MOI.get(sampler, _ExternalEncodingAttrModule.VariableEncodingSet(), vy) == [-3.0, 0.0, 4.0]
+        @test MOI.get(sampler, QUBODrivers.VariableEncodingSet(), vx) isa Vector{Int}
+        @test MOI.get(sampler, QUBODrivers.VariableEncodingSet(), vx) == [5, -2, 1]
+        @test MOI.get(sampler, _ExternalEncodingAttrModule.VariableEncodingSet(), vy) isa Vector{Int}
+        @test MOI.get(sampler, _ExternalEncodingAttrModule.VariableEncodingSet(), vy) == [-3, 0, 4]
         @test QUBODrivers.VariableEncodingSet() in MOI.get(sampler, MOI.ListOfVariableAttributesSet())
 
         @test JuMP.value(x) == 1.0
@@ -256,6 +260,22 @@ function test_arbitrary_finite_encoding_sets()
         MOI.set(sampler, QUBODrivers.VariableEncodingSet(), vx, [-4, 2])
         @test QUBODrivers.variable_domain(sampler, vx) == [-4, 2]
         @test_throws ArgumentError MOI.set(sampler, QUBODrivers.VariableEncodingSet(), vx, nothing)
+
+        # Updating VariableEncodingSet on bounded variable `vy` ([-5, 5]) must enforce declared bounds
+        @test_throws ArgumentError MOI.set(sampler, QUBODrivers.VariableEncodingSet(), vy, [-10, 10])
+        @test_throws ArgumentError MOI.set(
+            sampler,
+            _ExternalEncodingAttrModule.VariableEncodingSet(),
+            vy,
+            [-10, 10],
+        )
+        @test QUBODrivers.variable_domain(sampler, vy) == [-3, 0, 4]
+        MOI.set(sampler, _ExternalEncodingAttrModule.VariableEncodingSet(), vy, [-5, 5])
+        @test QUBODrivers.variable_domain(sampler, vy) == [-5, 5]
+
+        # Updating VariableEncodingSet must also reject sets that exclude an active warm start
+        MOI.set(sampler, MOI.VariablePrimalStart(), vy, 5)
+        @test_throws ArgumentError MOI.set(sampler, QUBODrivers.VariableEncodingSet(), vy, [-5, 0])
     end
 
     return nothing
@@ -464,6 +484,201 @@ function test_minimal_domain_sampler_fallback()
 
         MOI.empty!(sampler)
         @test isempty(QUBODrivers.variable_domains(sampler))
+    end
+
+    return nothing
+end
+
+function test_moi_constraint_indices_and_bound_introspection()
+    @testset "→ MOI constraint indices & bound introspection (interleaved & nonconsecutive)" begin
+        src = MOIU.UniversalFallback(MOIU.Model{Float64}())
+        v1 = MOI.add_variable(src) # VI(1): ZeroOne
+        v_del = MOI.add_variable(src) # VI(2): deleted so indices are nonconsecutive
+        v3 = MOI.add_variable(src) # VI(3): Integer + Interval(0.0, 2.0)
+        v4 = MOI.add_variable(src) # VI(4): Spin
+        v5 = MOI.add_variable(src) # VI(5): Integer + GreaterThan(-1.0) + LessThan(1.0) + EqualTo(0)
+        MOI.delete(src, v_del)
+
+        c_zo = MOI.add_constraint(src, v1, MOI.ZeroOne())
+        c_int3 = MOI.add_constraint(src, v3, MOI.Integer())
+        c_iv3 = MOI.add_constraint(src, v3, MOI.Interval(0.0, 2.0))
+        c_sp4 = MOI.add_constraint(src, v4, QUBODrivers.Spin())
+        c_int5 = MOI.add_constraint(src, v5, MOI.Integer())
+        c_gt5 = MOI.add_constraint(src, v5, MOI.GreaterThan(-1.0))
+        c_lt5 = MOI.add_constraint(src, v5, MOI.LessThan(1.0))
+        c_eq5 = MOI.add_constraint(src, v5, MOI.EqualTo(0))
+
+        MOI.set(src, MOI.ObjectiveSense(), MOI.MIN_SENSE)
+        MOI.set(src, MOI.ObjectiveFunction{VI}(), v1)
+
+        dest = _TestFiniteDomainSampler.Optimizer{Float64}()
+        idx_map = MOI.copy_to(dest, src)
+
+        # Every source constraint maps to a valid destination constraint with matching function and set
+        for (c_src, expected_vi, expected_set) in (
+            (c_zo, v1, MOI.ZeroOne()),
+            (c_int3, v3, MOI.Integer()),
+            (c_iv3, v3, MOI.Interval(0.0, 2.0)),
+            (c_sp4, v4, QUBODrivers.Spin()),
+            (c_int5, v5, MOI.Integer()),
+            (c_gt5, v5, MOI.GreaterThan(-1.0)),
+            (c_lt5, v5, MOI.LessThan(1.0)),
+            (c_eq5, v5, MOI.EqualTo(0)),
+        )
+            c_dest = idx_map[c_src]
+            @test c_dest.value == expected_vi.value
+            @test MOI.is_valid(dest, c_dest)
+            @test MOI.get(dest, MOI.ConstraintFunction(), c_dest) == expected_vi
+            @test MOI.get(dest, MOI.ConstraintSet(), c_dest) == expected_set
+        end
+
+        # Deleted / wrong-variable constraint indices are invalid
+        @test !MOI.is_valid(dest, MOI.ConstraintIndex{VI,MOI.Integer}(v1.value))
+        @test !MOI.is_valid(dest, MOI.ConstraintIndex{VI,MOI.Integer}(2))
+        @test !MOI.is_valid(dest, MOI.ConstraintIndex{VI,MOI.Interval{Float64}}(v1.value))
+        @test_throws ErrorException MOI.get(
+            dest,
+            MOI.ConstraintFunction(),
+            MOI.ConstraintIndex{VI,MOI.Integer}(v1.value),
+        )
+        @test_throws ErrorException MOI.get(
+            dest,
+            MOI.ConstraintSet(),
+            MOI.ConstraintIndex{VI,MOI.Interval{Float64}}(v1.value),
+        )
+
+        # Constraint types and counts include all accepted bound constraints
+        ctypes = MOI.get(dest, MOI.ListOfConstraintTypesPresent())
+        @test (VI, MOI.ZeroOne) in ctypes
+        @test (VI, QUBODrivers.Spin) in ctypes
+        @test (VI, MOI.Integer) in ctypes
+        @test (VI, MOI.Interval{Float64}) in ctypes
+        @test (VI, MOI.GreaterThan{Float64}) in ctypes
+        @test (VI, MOI.LessThan{Float64}) in ctypes
+        @test (VI, MOI.EqualTo{Int}) in ctypes
+
+        @test MOI.get(dest, MOI.NumberOfConstraints{VI,MOI.Integer}()) == 2
+        @test MOI.get(dest, MOI.ListOfConstraintIndices{VI,MOI.Integer}()) == [
+            MOI.ConstraintIndex{VI,MOI.Integer}(v3.value),
+            MOI.ConstraintIndex{VI,MOI.Integer}(v5.value),
+        ]
+        @test MOI.get(dest, MOI.NumberOfConstraints{VI,MOI.Interval{Float64}}()) == 1
+        @test MOI.get(dest, MOI.ListOfConstraintIndices{VI,MOI.Interval{Float64}}()) == [
+            MOI.ConstraintIndex{VI,MOI.Interval{Float64}}(v3.value),
+        ]
+        @test MOI.get(dest, MOI.NumberOfConstraints{VI,MOI.GreaterThan{Float64}}()) == 1
+        @test MOI.get(dest, MOI.NumberOfConstraints{VI,MOI.LessThan{Float64}}()) == 1
+    end
+
+    return nothing
+end
+
+function test_exact_integer_precision_and_zero_variable_models()
+    @testset "→ Exact integer precision, wide sparse shift check & zero-variable models" begin
+        # 1. Float64 boundary: 2^53 = 9007199254740992 and 2^53 + 1 = 9007199254740993
+        big_even_64 = (1 << 53)
+        big_odd_64 = (1 << 53) + 1
+
+        src64 = MOIU.UniversalFallback(MOIU.Model{Float64}())
+        v_set64 = MOI.add_variable(src64)
+        v_fix64 = MOI.add_variable(src64)
+        MOI.set(src64, QUBODrivers.VariableEncodingSet(), v_set64, [big_even_64, big_odd_64])
+        MOI.add_constraint(src64, v_fix64, MOI.Integer())
+        c_eq64 = MOI.add_constraint(src64, v_fix64, MOI.EqualTo(big_odd_64))
+        MOI.set(src64, MOI.ObjectiveSense(), MOI.MIN_SENSE)
+        MOI.set(
+            src64,
+            MOI.ObjectiveFunction{MOI.ScalarAffineFunction{Float64}}(),
+            MOI.ScalarAffineFunction(MOI.ScalarAffineTerm{Float64}[], 3.5),
+        )
+
+        dest64 = _TestFiniteDomainSampler.Optimizer{Float64}()
+        idx_map64 = MOI.copy_to(dest64, src64)
+
+        @test QUBODrivers.variable_domain(dest64, v_fix64) == [big_odd_64]
+        @test MOI.get(dest64, QUBODrivers.VariableEncodingSet(), v_set64) == [big_even_64, big_odd_64]
+        @test length(unique(MOI.get(dest64, QUBODrivers.VariableEncodingSet(), v_set64))) == 2
+        @test MOI.get(dest64, MOI.ConstraintSet(), idx_map64[c_eq64]) == MOI.EqualTo(big_odd_64)
+        @test MOI.get(dest64, MOI.VariablePrimalStart(), v_fix64) == big_odd_64
+
+        # Fixing to 2^53 + 1 when encoding set is [2^53] must be rejected
+        src_bad64 = MOIU.UniversalFallback(MOIU.Model{Float64}())
+        vb64 = MOI.add_variable(src_bad64)
+        MOI.set(src_bad64, QUBODrivers.VariableEncodingSet(), vb64, [big_even_64])
+        MOI.add_constraint(src_bad64, vb64, MOI.EqualTo(big_odd_64))
+        MOI.set(src_bad64, MOI.ObjectiveSense(), MOI.MIN_SENSE)
+        MOI.set(
+            src_bad64,
+            MOI.ObjectiveFunction{MOI.ScalarAffineFunction{Float64}}(),
+            MOI.ScalarAffineFunction(MOI.ScalarAffineTerm{Float64}[], 0.0),
+        )
+        @test_throws ArgumentError MOI.copy_to(
+            _TestFiniteDomainSampler.Optimizer{Float64}(),
+            src_bad64,
+        )
+
+        # Unavoidable lossy conversion to Float64 in nonzero objective term is rejected descriptively
+        src_lossy64 = MOIU.UniversalFallback(MOIU.Model{Float64}())
+        vl64 = MOI.add_variable(src_lossy64)
+        MOI.add_constraint(src_lossy64, vl64, MOI.Integer())
+        MOI.add_constraint(src_lossy64, vl64, MOI.EqualTo(big_odd_64))
+        MOI.set(src_lossy64, MOI.ObjectiveSense(), MOI.MIN_SENSE)
+        MOI.set(src_lossy64, MOI.ObjectiveFunction{VI}(), vl64)
+        @test_throws ArgumentError MOI.copy_to(
+            _TestFiniteDomainSampler.Optimizer{Float64}(),
+            src_lossy64,
+        )
+
+        # 2. Float32 boundary: 2^24 = 16777216 and 2^24 + 1 = 16777217
+        big_even_32 = (1 << 24)
+        big_odd_32 = (1 << 24) + 1
+
+        src32 = MOIU.UniversalFallback(MOIU.Model{Float32}())
+        v_set32 = MOI.add_variable(src32)
+        v_fix32 = MOI.add_variable(src32)
+        MOI.set(src32, QUBODrivers.VariableEncodingSet(), v_set32, [big_even_32, big_odd_32])
+        MOI.add_constraint(src32, v_fix32, MOI.Integer())
+        c_eq32 = MOI.add_constraint(src32, v_fix32, MOI.EqualTo(big_odd_32))
+        MOI.set(src32, MOI.ObjectiveSense(), MOI.MIN_SENSE)
+        MOI.set(
+            src32,
+            MOI.ObjectiveFunction{MOI.ScalarAffineFunction{Float32}}(),
+            MOI.ScalarAffineFunction(MOI.ScalarAffineTerm{Float32}[], 1.0f0),
+        )
+
+        dest32 = _TestFiniteDomainSampler.Optimizer{Float32}()
+        idx_map32 = MOI.copy_to(dest32, src32)
+
+        @test QUBODrivers.variable_domain(dest32, v_fix32) == [big_odd_32]
+        @test MOI.get(dest32, QUBODrivers.VariableEncodingSet(), v_set32) == [big_even_32, big_odd_32]
+        @test MOI.get(dest32, MOI.ConstraintSet(), idx_map32[c_eq32]) == MOI.EqualTo(big_odd_32)
+
+        # 3. Wide sparse domain shift check does not materialize range
+        src_sparse = MOIU.UniversalFallback(MOIU.Model{Float64}())
+        v_sp = MOI.add_variable(src_sparse)
+        MOI.set(src_sparse, QUBODrivers.VariableEncodingSet(), v_sp, [typemin(Int), typemax(Int)])
+        MOI.set(src_sparse, MOI.ObjectiveSense(), MOI.MIN_SENSE)
+        MOI.set(src_sparse, MOI.ObjectiveFunction{VI}(), v_sp)
+        dest_sparse = _TestFiniteDomainSampler.Optimizer{Float64}()
+        MOI.copy_to(dest_sparse, src_sparse)
+        @test_throws ArgumentError QUBODrivers.polynomial_objective(dest_sparse; shift = true)
+
+        # 4. Zero-variable non-empty model preserves objective constant and optimization sense
+        src_zero = MOIU.UniversalFallback(MOIU.Model{Float64}())
+        MOI.set(src_zero, MOI.ObjectiveSense(), MOI.MAX_SENSE)
+        MOI.set(
+            src_zero,
+            MOI.ObjectiveFunction{MOI.ScalarAffineFunction{Float64}}(),
+            MOI.ScalarAffineFunction(MOI.ScalarAffineTerm{Float64}[], 7.0),
+        )
+        dest_zero = _TestFiniteDomainSampler.Optimizer{Float64}()
+        MOI.copy_to(dest_zero, src_zero)
+        @test MOI.get(dest_zero, MOI.ObjectiveSense()) == MOI.MAX_SENSE
+        @test QUBOTools.sense(dest_zero) == QUBOTools.Max
+        @test QUBODrivers.polynomial_objective(dest_zero) == 7.0
+        @test QUBOTools.value(dest_zero, Int[]) == 7.0
+        MOI.optimize!(dest_zero)
+        @test MOI.get(dest_zero, MOI.ObjectiveValue()) == 7.0
     end
 
     return nothing

@@ -96,7 +96,12 @@ const _MAX_FINITE_DOMAIN_SIZE = 1_000_000
 
 struct _FixedVariable{T}
     value::T
+    int_value::Int
     set_type::DataType
+end
+
+function _FixedVariable{T}(value::T, set_type::DataType) where {T}
+    return _FixedVariable{T}(value, round(Int, value), set_type)
 end
 
 struct _VariableDomain
@@ -104,6 +109,26 @@ struct _VariableDomain
     values::Vector{Int}
     has_encoding_set::Bool
     has_integer_constraint::Bool
+    lower_bound::Union{Nothing,Real}
+    upper_bound::Union{Nothing,Real}
+    bound_sets::Vector{MOI.AbstractScalarSet}
+end
+
+function _VariableDomain(
+    kind::Symbol,
+    values::Vector{Int},
+    has_encoding_set::Bool,
+    has_integer_constraint::Bool,
+)
+    return _VariableDomain(
+        kind,
+        values,
+        has_encoding_set,
+        has_integer_constraint,
+        nothing,
+        nothing,
+        MOI.AbstractScalarSet[],
+    )
 end
 
 struct _PolynomialObjective{T}
@@ -115,8 +140,25 @@ struct _PolynomialObjective{T}
     has_nonbinary_domains::Bool
 end
 
+function _convert_exact(
+    ::Type{T},
+    val::Integer,
+    context::AbstractString = "discrete value",
+)::T where {T<:Real}
+    tval = convert(T, val)
+    if T <: AbstractFloat && (!isfinite(tval) || BigInt(tval) != BigInt(val))
+        throw(
+            ArgumentError(
+                "Integer value '$val' ($context) cannot be represented exactly in type $T.",
+            ),
+        )
+    end
+    return tval
+end
+
 _fixed_value(fixed_variables::AbstractDict{VI,T}, vi::VI) where {T<:Real} = fixed_variables[vi]
-_fixed_value(fixed_variables::AbstractDict{VI,_FixedVariable{T}}, vi::VI) where {T} = fixed_variables[vi].value
+_fixed_value(fixed_variables::AbstractDict{VI,_FixedVariable{T}}, vi::VI) where {T} =
+    _convert_exact(T, fixed_variables[vi].int_value, "fixed value for variable '$vi'")
 
 
 # ~*~ :: MathOptInterface :: ~*~ #
@@ -131,7 +173,11 @@ function MOI.empty!(sampler::AbstractSampler{T}) where {T}
 end
 
 function MOI.is_empty(sampler::AbstractSampler{T}) where {T}
-    return isempty(_get_moi_variables(sampler))
+    return isempty(_get_moi_variables(sampler)) &&
+           isempty(QUBOTools.solution(sampler)) &&
+           iszero(QUBOTools.offset(sampler)) &&
+           QUBOTools.sense(sampler) === QUBOTools.Min &&
+           isnothing(_get_polynomial_objective(sampler))
 end
 
 function MOI.optimize!(sampler::AbstractSampler{T}) where {T}
@@ -163,7 +209,8 @@ function MOI.copy_to(sampler::AbstractSampler{T}, src::MOI.ModelLike) where {T}
         _store_polynomial_objective!(sampler, poly_obj)
     else
         _store_polynomial_objective!(sampler, nothing)
-        model = isempty(fixed_variables) ? QUBOTools.Model{T}(src) :
+        model = (isempty(fixed_variables) && (!isempty(variables) || MOI.is_empty(src))) ?
+            QUBOTools.Model{T}(src) :
             _build_model_with_fixed_variables(T, src, variables, fixed_variables)
         QUBODrivers.set_model!(sampler, model)
     end
@@ -192,7 +239,25 @@ function MOI.copy_to(sampler::AbstractSampler{T}, src::MOI.ModelLike) where {T}
         end
     end
 
-    return MOIU.identity_index_map(src)
+    return _build_variable_constraint_index_map(src)
+end
+
+function _build_variable_constraint_index_map(src::MOI.ModelLike)
+    idx_map = MOIU.IndexMap()
+    for x in MOI.get(src, MOI.ListOfVariableIndices())
+        idx_map[x] = x
+    end
+    for (F, S) in MOI.get(src, MOI.ListOfConstraintTypesPresent())
+        for c in MOI.get(src, MOI.ListOfConstraintIndices{F,S}())
+            if F === VI
+                vi = MOI.get(src, MOI.ConstraintFunction(), c)
+                idx_map[c] = MOI.ConstraintIndex{VI,S}(vi.value)
+            else
+                idx_map[c] = c
+            end
+        end
+    end
+    return idx_map
 end
 
 function _store_moi_variables!(sampler::AbstractSampler, variables::Vector{VI})
@@ -571,7 +636,7 @@ function polynomial_objective(
     if shift && !isempty(vars)
         for i in eachindex(vars)
             u_i = active_domains[i]
-            if u_i != collect(first(u_i):last(u_i))
+            if !_is_contiguous_integer_domain(u_i)
                 throw(
                     ArgumentError(
                         "Cannot shift `polynomial_objective` (`shift = true`) because variable " *
@@ -583,7 +648,14 @@ function polynomial_objective(
         end
         if any(u -> !iszero(first(u)), active_domains)
             subs_exprs = PolyType{T}[
-                convert(PolyType{T}, vars[i] + convert(T, first(active_domains[i])))
+                convert(
+                    PolyType{T},
+                    vars[i] + _convert_exact(
+                        T,
+                        first(active_domains[i]),
+                        "lower bound shift for variable '$(poly_obj.variables[i])'",
+                    ),
+                )
                 for i in eachindex(vars)
             ]
             p = convert(PolyType{T}, p(vars => subs_exprs)) + zero_anchor
@@ -598,6 +670,14 @@ function polynomial_objective(
     end
 
     return p
+end
+
+function _is_contiguous_integer_domain(U::Vector{Int})::Bool
+    isempty(U) && return false
+    for k in 2:length(U)
+        widemul(U[k], 1) - widemul(U[k - 1], 1) == 1 || return false
+    end
+    return true
 end
 
 function polynomial_function(
@@ -626,14 +706,13 @@ function _fixed_constraint_variable(
     ci::MOI.ConstraintIndex{VI,MOI.EqualTo{S}},
 ) where {T,S<:Real}
     fixed_constraint_variables = _fixed_constraint_variables(sampler, S)
-    i = ci.value
-    n = length(fixed_constraint_variables)
+    vi = VI(ci.value)
 
-    if !(1 <= i <= n)
-        error("Invalid constraint index '$i'; There are $(n) constraints")
+    if !(vi in fixed_constraint_variables)
+        error("Invalid constraint index '$(ci.value)'; There are $(length(fixed_constraint_variables)) constraints")
     end
 
-    return fixed_constraint_variables[i]
+    return vi
 end
 
 function _domain_constraint_variables(sampler::AbstractSampler, kind::Symbol)
@@ -656,6 +735,18 @@ function _integer_constraint_variables(sampler::AbstractSampler)
     return VI[vi for vi in vars if haskey(vds, vi) && vds[vi].has_integer_constraint]
 end
 
+function _bound_constraint_variables(
+    sampler::AbstractSampler,
+    ::Type{B},
+) where {B<:Union{MOI.Interval{<:Real},MOI.GreaterThan{<:Real},MOI.LessThan{<:Real}}}
+    vds = _get_variable_domains(sampler)
+    vars = _get_moi_variables(sampler)
+    return VI[
+        vi for vi in vars if
+        haskey(vds, vi) && any(s -> typeof(s) === B, vds[vi].bound_sets)
+    ]
+end
+
 function _domain_constraint_variable(sampler::AbstractSampler, i::Integer, kind::Symbol = :all)
     variables = if kind === :all
         _get_moi_variables(sampler)
@@ -664,23 +755,23 @@ function _domain_constraint_variable(sampler::AbstractSampler, i::Integer, kind:
     else
         _domain_constraint_variables(sampler, kind)
     end
-    n = length(variables)
+    vi = VI(i)
 
-    if !(1 <= i <= n)
-        error("Invalid constraint index '$i'; There are $(n) constraints")
+    if !(vi in variables)
+        error("Invalid constraint index '$i'; There are $(length(variables)) constraints")
     end
 
-    return variables[i]
+    return vi
 end
 
 function _get_variable_encoding_set(
-    sampler::AbstractSampler{T},
+    sampler::AbstractSampler,
     vi::VI,
-)::Union{Vector{T},Nothing} where {T}
+)::Union{Vector{Int},Nothing}
     vds = _get_variable_domains(sampler)
     if haskey(vds, vi)
         vd = vds[vi]
-        return vd.has_encoding_set ? T[convert(T, v) for v in vd.values] : nothing
+        return vd.has_encoding_set ? copy(vd.values) : nothing
     elseif vi in _get_moi_variables(sampler) || QUBOTools.hasvariable(sampler, vi)
         return nothing
     else
@@ -689,18 +780,18 @@ function _get_variable_encoding_set(
 end
 
 function MOI.get(
-    sampler::AbstractSampler{T},
+    sampler::AbstractSampler,
     ::VariableEncodingSet,
     vi::VI,
-)::Union{Vector{T},Nothing} where {T}
+)::Union{Vector{Int},Nothing}
     return _get_variable_encoding_set(sampler, vi)
 end
 
 function MOI.get_fallback(
-    sampler::AbstractSampler{T},
+    sampler::AbstractSampler,
     attr::MOI.AbstractVariableAttribute,
     vi::VI,
-) where {T}
+)
     if _is_variable_encoding_set_attr(attr)
         return _get_variable_encoding_set(sampler, vi)
     end
@@ -755,14 +846,42 @@ function _set_variable_encoding_set!(
                 ),
             )
         end
-        new_vd = _VariableDomain(:set, int_set, true, old_vd.has_integer_constraint)
+        lo = old_vd.lower_bound
+        up = old_vd.upper_bound
+        if (!isnothing(lo) && any(v -> v < lo, int_set)) ||
+           (!isnothing(up) && any(v -> v > up, int_set))
+            throw(
+                ArgumentError(
+                    "Value set for variable '$vi' has entries outside its declared bounds " *
+                    "[$(isnothing(lo) ? "-∞" : lo), $(isnothing(up) ? "+∞" : up)].",
+                ),
+            )
+        end
+        new_vd = _VariableDomain(
+            :set,
+            int_set,
+            true,
+            old_vd.has_integer_constraint,
+            lo,
+            up,
+            old_vd.bound_sets,
+        )
     else
         new_vd = _VariableDomain(:set, int_set, true, false)
     end
 
     fixed_vars = _get_fixed_variables(sampler)
     if haskey(fixed_vars, vi)
-        _validate_fixed_value(new_vd, vi, fixed_vars[vi].value)
+        _validate_fixed_value(new_vd, vi, fixed_vars[vi].int_value)
+    elseif QUBOTools.hasvariable(sampler, vi)
+        s = QUBOTools.start(sampler, QUBOTools.index(sampler, vi))
+        if !isnothing(s) && !(s in int_set)
+            throw(
+                ArgumentError(
+                    "Value set for variable '$vi' excludes its warm-start value '$s'.",
+                ),
+            )
+        end
     end
 
     vds_copy = copy(vds)
@@ -801,7 +920,7 @@ function _get_variable_primal_start(sampler::AbstractSampler{T}, vi::VI) where {
     fixed_variables = _get_fixed_variables(sampler)
 
     if haskey(fixed_variables, vi)
-        return fixed_variables[vi].value
+        return fixed_variables[vi].int_value
     end
 
     i = QUBOTools.index(sampler, vi)
@@ -817,42 +936,54 @@ function _set_variable_primal_start!(sampler::AbstractSampler{T}, vi::VI, value)
     fixed_variables = _get_fixed_variables(sampler)
 
     if haskey(fixed_variables, vi)
-        fixed_value = fixed_variables[vi].value
+        fixed_value = fixed_variables[vi].int_value
 
-        if !isnothing(value) && value != fixed_value
-            error("Value for 'MOI.VariablePrimalStart' must match the fixed value '$fixed_value'")
+        if !isnothing(value)
+            if !(value isa Real && isfinite(value) && isinteger(value))
+                error("Value for 'MOI.VariablePrimalStart' must be an integer, or 'nothing'")
+            end
+            val_big = value isa Integer ? BigInt(value) : BigInt(value)
+            if val_big != BigInt(fixed_value)
+                error("Value for 'MOI.VariablePrimalStart' must match the fixed value '$fixed_value'")
+            end
         end
 
         return nothing
     end
 
+    int_val = nothing
     if !isnothing(value)
-        if !(value isa Real && isinteger(value))
+        if !(value isa Real && isfinite(value) && isinteger(value))
             error("Value for 'MOI.VariablePrimalStart' must be an integer, or 'nothing'")
         end
+        val_big = value isa Integer ? BigInt(value) : BigInt(value)
+        if !(typemin(Int) <= val_big <= typemax(Int))
+            error("Value for 'MOI.VariablePrimalStart' overflows Int")
+        end
+        int_val = Int(val_big)
 
         vds = _get_variable_domains(sampler)
         if haskey(vds, vi)
             vd = vds[vi]
-            if vd.kind === :bool && !(value == zero(value) || value == one(value))
+            if vd.kind === :bool && !(int_val == 0 || int_val == 1)
                 error("Integer value for 'MOI.VariablePrimalStart' must be either '0' or '1'")
-            elseif vd.kind === :spin && !(value == -one(value) || value == one(value))
+            elseif vd.kind === :spin && !(int_val == -1 || int_val == 1)
                 error("Integer value for 'MOI.VariablePrimalStart' must be either '-1' or '1'")
-            elseif !(value in vd.values)
+            elseif !(int_val in vd.values)
                 error("Integer value '$value' for 'MOI.VariablePrimalStart' must belong to domain $(vd.values)")
             end
         else
             X = QUBOTools.domain(sampler)
 
-            if X === QUBOTools.BoolDomain && !(value == zero(value) || value == one(value))
+            if X === QUBOTools.BoolDomain && !(int_val == 0 || int_val == 1)
                 error("Integer value for 'MOI.VariablePrimalStart' must be either '0' or '1'")
-            elseif X === QUBOTools.SpinDomain && !(value == -one(value) || value == one(value))
+            elseif X === QUBOTools.SpinDomain && !(int_val == -1 || int_val == 1)
                 error("Integer value for 'MOI.VariablePrimalStart' must be either '-1' or '1'")
             end
         end
     end
 
-    QUBOTools.attach!(sampler, vi => convert(Union{Integer, Nothing}, value))
+    QUBOTools.attach!(sampler, vi => int_val)
 
     return nothing
 end
@@ -886,13 +1017,32 @@ function _variable_domain(src::MOI.ModelLike, variables::Set{VI})
     end
 end
 
-function _validate_fixed_value(domain::Symbol, vi::VI, value::T) where {T}
+function _parse_fixed_integer_value(vi::VI, raw_val)::Int
+    if !(raw_val isa Real && isfinite(raw_val) && isinteger(raw_val))
+        throw(
+            ArgumentError(
+                "Invalid non-integer fixed value '$raw_val' for variable '$vi'.",
+            ),
+        )
+    end
+    val_big = raw_val isa Integer ? BigInt(raw_val) : BigInt(raw_val)
+    if !(typemin(Int) <= val_big <= typemax(Int))
+        throw(
+            ArgumentError(
+                "Fixed value '$raw_val' for variable '$vi' overflows Int.",
+            ),
+        )
+    end
+    return Int(val_big)
+end
+
+function _validate_fixed_value(domain::Symbol, vi::VI, value::Real)
     if domain === :bool
-        if !(value == zero(T) || value == one(T))
+        if !(value == zero(value) || value == one(value))
             throw(ArgumentError("Invalid fixed value '$value' for boolean variable '$vi'"))
         end
     elseif domain === :spin
-        if !(value == -one(T) || value == one(T))
+        if !(value == -one(value) || value == one(value))
             throw(ArgumentError("Invalid fixed value '$value' for spin variable '$vi'"))
         end
     end
@@ -900,13 +1050,13 @@ function _validate_fixed_value(domain::Symbol, vi::VI, value::T) where {T}
     return nothing
 end
 
-function _validate_fixed_value(vd::_VariableDomain, vi::VI, value::T) where {T}
+function _validate_fixed_value(vd::_VariableDomain, vi::VI, value::Real)
     if vd.kind === :bool
-        if !(value == zero(T) || value == one(T))
+        if !(value == zero(value) || value == one(value))
             throw(ArgumentError("Invalid fixed value '$value' for boolean variable '$vi'"))
         end
     elseif vd.kind === :spin
-        if !(value == -one(T) || value == one(T))
+        if !(value == -one(value) || value == one(value))
             throw(ArgumentError("Invalid fixed value '$value' for spin variable '$vi'"))
         end
     else
@@ -946,7 +1096,7 @@ function _parse_encoding_set(vi::VI, raw_set)::Vector{Int}
                 ),
             )
         end
-        val_big = round(BigInt, val)
+        val_big = val isa Integer ? BigInt(val) : BigInt(val)
         if !(typemin(Int) <= val_big <= typemax(Int))
             throw(
                 ArgumentError(
@@ -1072,7 +1222,7 @@ function _collect_variable_domains_and_fixed(
     fixed_variables = Dict{VI,_FixedVariable{T}}()
     var_domains = Dict{VI,_VariableDomain}()
 
-    if isempty(variables)
+    if MOI.is_empty(src)
         return fixed_variables, var_domains, false
     end
 
@@ -1082,6 +1232,7 @@ function _collect_variable_domains_and_fixed(
     bounded_vars = Set{VI}()
     lower_bounds = Dict{VI,Real}()
     upper_bounds = Dict{VI,Real}()
+    bound_sets_by_var = Dict{VI,Vector{MOI.AbstractScalarSet}}()
 
     for (F, S) in MOI.get(src, MOI.ListOfConstraintTypesPresent())
         if F !== VI
@@ -1105,6 +1256,7 @@ function _collect_variable_domains_and_fixed(
                 vi = MOI.get(src, MOI.ConstraintFunction(), ci)
                 set = MOI.get(src, MOI.ConstraintSet(), ci)
                 push!(bounded_vars, vi)
+                push!(get!(bound_sets_by_var, vi, MOI.AbstractScalarSet[]), set)
                 _update_lower_bound!(lower_bounds, vi, set.lower)
                 _update_upper_bound!(upper_bounds, vi, set.upper)
             end
@@ -1113,6 +1265,7 @@ function _collect_variable_domains_and_fixed(
                 vi = MOI.get(src, MOI.ConstraintFunction(), ci)
                 set = MOI.get(src, MOI.ConstraintSet(), ci)
                 push!(bounded_vars, vi)
+                push!(get!(bound_sets_by_var, vi, MOI.AbstractScalarSet[]), set)
                 _update_lower_bound!(lower_bounds, vi, set.lower)
             end
         elseif S <: MOI.LessThan
@@ -1120,23 +1273,25 @@ function _collect_variable_domains_and_fixed(
                 vi = MOI.get(src, MOI.ConstraintFunction(), ci)
                 set = MOI.get(src, MOI.ConstraintSet(), ci)
                 push!(bounded_vars, vi)
+                push!(get!(bound_sets_by_var, vi, MOI.AbstractScalarSet[]), set)
                 _update_upper_bound!(upper_bounds, vi, set.upper)
             end
         elseif S <: MOI.EqualTo
             for ci in MOI.get(src, MOI.ListOfConstraintIndices{F,S}())
                 vi = MOI.get(src, MOI.ConstraintFunction(), ci)
-                value = convert(T, MOI.get(src, MOI.ConstraintSet(), ci).value)
+                raw_val = MOI.get(src, MOI.ConstraintSet(), ci).value
+                int_val = _parse_fixed_integer_value(vi, raw_val)
                 value_type = S.parameters[1]
 
                 if haskey(fixed_variables, vi)
-                    fixed_variables[vi].value == value ||
+                    fixed_variables[vi].int_value == int_val ||
                         throw(ArgumentError("Conflicting fixed values for variable '$vi'"))
                     fixed_variables[vi].set_type == value_type ||
                         throw(ArgumentError("Conflicting fixed constraint types for variable '$vi'"))
                     continue
                 end
 
-                fixed_variables[vi] = _FixedVariable{T}(value, value_type)
+                fixed_variables[vi] = _FixedVariable{T}(convert(T, int_val), int_val, value_type)
             end
         else
             throw(
@@ -1158,6 +1313,7 @@ function _collect_variable_domains_and_fixed(
         has_set = haskey(encoding_sets, vi)
         lo = get(lower_bounds, vi, nothing)
         up = get(upper_bounds, vi, nothing)
+        v_bound_sets = get(bound_sets_by_var, vi, MOI.AbstractScalarSet[])
 
         if (is_bool + is_spin + is_int) > 1
             throw(
@@ -1202,7 +1358,7 @@ function _collect_variable_domains_and_fixed(
                 )
             end
 
-            var_domains[vi] = _VariableDomain(:set, vals, true, is_int)
+            var_domains[vi] = _VariableDomain(:set, vals, true, is_int, lo, up, v_bound_sets)
         elseif is_bool
             if !supports_domain(sampler, :bool)
                 throw(
@@ -1221,7 +1377,7 @@ function _collect_variable_domains_and_fixed(
                     ),
                 )
             end
-            var_domains[vi] = _VariableDomain(:bool, [0, 1], false, false)
+            var_domains[vi] = _VariableDomain(:bool, [0, 1], false, false, lo, up, v_bound_sets)
         elseif is_spin
             if !supports_domain(sampler, :spin)
                 throw(
@@ -1240,7 +1396,7 @@ function _collect_variable_domains_and_fixed(
                     ),
                 )
             end
-            var_domains[vi] = _VariableDomain(:spin, [-1, 1], false, false)
+            var_domains[vi] = _VariableDomain(:spin, [-1, 1], false, false, lo, up, v_bound_sets)
         elseif is_int
             if !supports_domain(sampler, :int)
                 throw(
@@ -1252,14 +1408,7 @@ function _collect_variable_domains_and_fixed(
             end
 
             if haskey(fixed_variables, vi) && (isnothing(lo) || isnothing(up))
-                fval = fixed_variables[vi].value
-                if !(isfinite(fval) && isinteger(fval))
-                    throw(
-                        ArgumentError(
-                            "Invalid non-integer fixed value '$fval' for integer variable '$vi'.",
-                        ),
-                    )
-                end
+                fval = fixed_variables[vi].int_value
                 if (!isnothing(lo) && fval < lo) || (!isnothing(up) && fval > up)
                     throw(
                         ArgumentError(
@@ -1268,15 +1417,7 @@ function _collect_variable_domains_and_fixed(
                         ),
                     )
                 end
-                fval_big = round(BigInt, fval)
-                if !(typemin(Int) <= fval_big <= typemax(Int))
-                    throw(
-                        ArgumentError(
-                            "Fixed value '$fval' for integer variable '$vi' overflows Int.",
-                        ),
-                    )
-                end
-                var_domains[vi] = _VariableDomain(:int, [Int(fval_big)], false, true)
+                var_domains[vi] = _VariableDomain(:int, [fval], false, true, lo, up, v_bound_sets)
             else
                 if isnothing(lo) || isnothing(up)
                     throw(
@@ -1287,7 +1428,7 @@ function _collect_variable_domains_and_fixed(
                     )
                 end
                 vals = _compute_contiguous_integer_domain(vi, lo, up)
-                var_domains[vi] = _VariableDomain(:int, vals, false, true)
+                var_domains[vi] = _VariableDomain(:int, vals, false, true, lo, up, v_bound_sets)
             end
         else
             throw(
@@ -1299,7 +1440,7 @@ function _collect_variable_domains_and_fixed(
         end
 
         if haskey(fixed_variables, vi)
-            _validate_fixed_value(var_domains[vi], vi, fixed_variables[vi].value)
+            _validate_fixed_value(var_domains[vi], vi, fixed_variables[vi].int_value)
         end
     end
 
@@ -1323,20 +1464,20 @@ function _collect_fixed_variables(::Type{T}, src::MOI.ModelLike, domain::Symbol)
 
         for ci in MOI.get(src, MOI.ListOfConstraintIndices{F,S}())
             vi = MOI.get(src, MOI.ConstraintFunction(), ci)
-            value = convert(T, MOI.get(src, MOI.ConstraintSet(), ci).value)
+            raw_val = MOI.get(src, MOI.ConstraintSet(), ci).value
+            _validate_fixed_value(domain, vi, raw_val)
+            int_val = _parse_fixed_integer_value(vi, raw_val)
             value_type = S.parameters[1]
 
-            _validate_fixed_value(domain, vi, value)
-
             if haskey(fixed_variables, vi)
-                fixed_variables[vi].value == value ||
+                fixed_variables[vi].int_value == int_val ||
                     throw(ArgumentError("Conflicting fixed values for variable '$vi'"))
                 fixed_variables[vi].set_type == value_type ||
                     throw(ArgumentError("Conflicting fixed constraint types for variable '$vi'"))
                 continue
             end
 
-            fixed_variables[vi] = _FixedVariable{T}(value, value_type)
+            fixed_variables[vi] = _FixedVariable{T}(convert(T, int_val), int_val, value_type)
         end
     end
 
@@ -1359,6 +1500,7 @@ function _accumulate_affine_term!(
     offset::T,
 ) where {T}
     if haskey(fixed_variables, vi)
+        iszero(coefficient) && return offset
         return offset + coefficient * _fixed_value(fixed_variables, vi)
     end
 
@@ -1376,6 +1518,7 @@ function _accumulate_quadratic_term!(
     coefficient::T,
     offset::T,
 ) where {T}
+    iszero(coefficient) && return offset
     xi_fixed = haskey(fixed_variables, xi)
     xj_fixed = haskey(fixed_variables, xj)
 
@@ -1532,6 +1675,17 @@ function _uniform_binary_or_spin_domain(var_domains::Dict{VI,_VariableDomain})::
     return (kind === :bool || kind === :spin) ? kind : nothing
 end
 
+function _active_polynomial_variables(p::MP.AbstractPolynomialLike)::Set{VarType}
+    active = Set{VarType}()
+    for term in MP.terms(p)
+        iszero(MP.coefficient(term)) && continue
+        for (pv, exp) in MP.powers(MP.monomial(term))
+            exp > 0 && push!(active, pv)
+        end
+    end
+    return active
+end
+
 function _build_polynomial_sampler_model(
     ::Type{T},
     src::MOI.ModelLike,
@@ -1541,7 +1695,7 @@ function _build_polynomial_sampler_model(
     allow_polynomial_objective::Bool = true,
     has_nonbinary_domains::Bool = false,
 ) where {T}
-    if MOI.is_empty(src) || isempty(variables)
+    if MOI.is_empty(src)
         model = QUBOTools.Model{VI,T,Int}(; sense = :min, domain = :bool)
         poly_obj = _PolynomialObjective{T}(
             zero(PolyType{T}),
@@ -1584,15 +1738,23 @@ function _build_polynomial_sampler_model(
     f = MOI.get(src, MOI.ObjectiveFunction{F}())
     spf = f isa FuncType{T} ? f : convert(FuncType{T}, f)
 
+    spf_poly_vars = MP.variables(spf.polynomial)
+    active_spf_vars = _active_polynomial_variables(spf.polynomial)
     subs_targets = PolyType{T}[
-        haskey(fixed_variables, vi) ?
-            convert(PolyType{T}, _fixed_value(fixed_variables, vi)) :
-            convert(PolyType{T}, free_var_map[vi])
-        for vi in spf.variables
+        let vi = spf.variables[j]
+            if haskey(fixed_variables, vi)
+                (j <= length(spf_poly_vars) && spf_poly_vars[j] in active_spf_vars) ?
+                    convert(PolyType{T}, _fixed_value(fixed_variables, vi)) :
+                    zero(PolyType{T})
+            else
+                convert(PolyType{T}, free_var_map[vi])
+            end
+        end
+        for j in eachindex(spf.variables)
     ]
     raw_poly = isempty(spf.variables) ?
         convert(PolyType{T}, spf.polynomial) :
-        convert(PolyType{T}, spf.polynomial(MP.variables(spf.polynomial) => subs_targets))
+        convert(PolyType{T}, spf.polynomial(spf_poly_vars => subs_targets))
     zero_anchor = sum(zero(T) * pv for pv in poly_vars; init = zero(PolyType{T}))
     poly = raw_poly + zero_anchor
 
@@ -1795,13 +1957,13 @@ function MOI.get(sampler::AbstractSampler{T}, vp::MOI.VariablePrimal, vi::VI) wh
 
     fixed_vars = _get_fixed_variables(sampler)
     if haskey(fixed_vars, vi)
-        return fixed_vars[vi].value
+        return _convert_exact(T, fixed_vars[vi].int_value, "fixed primal value for variable '$vi'")
     end
 
     j = QUBOTools.index(sampler, vi)
     s = QUBOTools.state(ω, i, j)
 
-    return convert(T, s)
+    return _convert_exact(T, s, "sampled primal value for variable '$vi'")
 end
 
 function MOI.get(sampler::AbstractSampler{T}, ::MOI.NumberOfVariables) where {T}
@@ -1827,6 +1989,13 @@ function MOI.get(sampler::AbstractSampler{T}, ::MOI.NumberOfConstraints{VI,MOI.I
     return length(_integer_constraint_variables(sampler))
 end
 
+function MOI.get(
+    sampler::AbstractSampler{T},
+    ::MOI.NumberOfConstraints{VI,B},
+) where {T,B<:Union{MOI.Interval{<:Real},MOI.GreaterThan{<:Real},MOI.LessThan{<:Real}}}
+    return length(_bound_constraint_variables(sampler, B))
+end
+
 function MOI.get(sampler::AbstractSampler{T}, ::MOI.ListOfConstraintTypesPresent) where {T}
     if iszero(MOI.get(sampler, MOI.NumberOfVariables()))
         return Tuple{Type,Type}[]
@@ -1842,6 +2011,20 @@ function MOI.get(sampler::AbstractSampler{T}, ::MOI.ListOfConstraintTypesPresent
     end
     if !isempty(_integer_constraint_variables(sampler))
         push!(constraint_types, (VI, MOI.Integer))
+    end
+
+    vds = _get_variable_domains(sampler)
+    bound_set_types = DataType[]
+    for vi in _get_moi_variables(sampler)
+        if haskey(vds, vi)
+            for bset in vds[vi].bound_sets
+                B = typeof(bset)
+                B in bound_set_types || push!(bound_set_types, B)
+            end
+        end
+    end
+    for B in bound_set_types
+        push!(constraint_types, (VI, B))
     end
 
     fixed_variables = _get_fixed_variables(sampler)
@@ -1870,8 +2053,8 @@ function MOI.get(
     ::MOI.ListOfConstraintIndices{VI,MOI.ZeroOne},
 ) where {T}
     return MOI.ConstraintIndex{VI,MOI.ZeroOne}[
-        MOI.ConstraintIndex{VI,MOI.ZeroOne}(i) for
-        i in 1:length(_domain_constraint_variables(sampler, :bool))
+        MOI.ConstraintIndex{VI,MOI.ZeroOne}(vi.value) for
+        vi in _domain_constraint_variables(sampler, :bool)
     ]
 end
 
@@ -1880,8 +2063,8 @@ function MOI.get(
     ::MOI.ListOfConstraintIndices{VI,Spin},
 ) where {T}
     return MOI.ConstraintIndex{VI,Spin}[
-        MOI.ConstraintIndex{VI,Spin}(i) for
-        i in 1:length(_domain_constraint_variables(sampler, :spin))
+        MOI.ConstraintIndex{VI,Spin}(vi.value) for
+        vi in _domain_constraint_variables(sampler, :spin)
     ]
 end
 
@@ -1890,8 +2073,18 @@ function MOI.get(
     ::MOI.ListOfConstraintIndices{VI,MOI.Integer},
 ) where {T}
     return MOI.ConstraintIndex{VI,MOI.Integer}[
-        MOI.ConstraintIndex{VI,MOI.Integer}(i) for
-        i in 1:length(_integer_constraint_variables(sampler))
+        MOI.ConstraintIndex{VI,MOI.Integer}(vi.value) for
+        vi in _integer_constraint_variables(sampler)
+    ]
+end
+
+function MOI.get(
+    sampler::AbstractSampler{T},
+    ::MOI.ListOfConstraintIndices{VI,B},
+) where {T,B<:Union{MOI.Interval{<:Real},MOI.GreaterThan{<:Real},MOI.LessThan{<:Real}}}
+    return MOI.ConstraintIndex{VI,B}[
+        MOI.ConstraintIndex{VI,B}(vi.value) for
+        vi in _bound_constraint_variables(sampler, B)
     ]
 end
 
@@ -1900,8 +2093,8 @@ function MOI.get(
     ::MOI.ListOfConstraintIndices{VI,MOI.EqualTo{S}},
 ) where {T,S<:Real}
     return MOI.ConstraintIndex{VI,MOI.EqualTo{S}}[
-        MOI.ConstraintIndex{VI,MOI.EqualTo{S}}(i) for
-        i in 1:length(_fixed_constraint_variables(sampler, S))
+        MOI.ConstraintIndex{VI,MOI.EqualTo{S}}(vi.value) for
+        vi in _fixed_constraint_variables(sampler, S)
     ]
 end
 
@@ -1932,6 +2125,19 @@ end
 function MOI.get(
     sampler::AbstractSampler{T},
     ::MOI.ConstraintFunction,
+    ci::MOI.ConstraintIndex{VI,B},
+) where {T,B<:Union{MOI.Interval{<:Real},MOI.GreaterThan{<:Real},MOI.LessThan{<:Real}}}
+    vars = _bound_constraint_variables(sampler, B)
+    vi = VI(ci.value)
+    if !(vi in vars)
+        error("Invalid constraint index '$(ci.value)'; There are $(length(vars)) constraints")
+    end
+    return vi
+end
+
+function MOI.get(
+    sampler::AbstractSampler{T},
+    ::MOI.ConstraintFunction,
     ci::MOI.ConstraintIndex{VI,MOI.EqualTo{S}},
 ) where {T,S<:Real}
     return _fixed_constraint_variable(sampler, ci)
@@ -1940,25 +2146,45 @@ end
 function MOI.get(
     sampler::AbstractSampler{T},
     ::MOI.ConstraintSet,
-    ::MOI.ConstraintIndex{VI,MOI.ZeroOne},
+    ci::MOI.ConstraintIndex{VI,MOI.ZeroOne},
 ) where {T}
+    _domain_constraint_variable(sampler, ci.value, :bool)
     return MOI.ZeroOne()
 end
 
 function MOI.get(
     sampler::AbstractSampler{T},
     ::MOI.ConstraintSet,
-    ::MOI.ConstraintIndex{VI,Spin},
+    ci::MOI.ConstraintIndex{VI,Spin},
 ) where {T}
+    _domain_constraint_variable(sampler, ci.value, :spin)
     return Spin()
 end
 
 function MOI.get(
     sampler::AbstractSampler{T},
     ::MOI.ConstraintSet,
-    ::MOI.ConstraintIndex{VI,MOI.Integer},
+    ci::MOI.ConstraintIndex{VI,MOI.Integer},
 ) where {T}
+    _domain_constraint_variable(sampler, ci.value, :integer_constraint)
     return MOI.Integer()
+end
+
+function MOI.get(
+    sampler::AbstractSampler{T},
+    ::MOI.ConstraintSet,
+    ci::MOI.ConstraintIndex{VI,B},
+) where {T,B<:Union{MOI.Interval{<:Real},MOI.GreaterThan{<:Real},MOI.LessThan{<:Real}}}
+    vds = _get_variable_domains(sampler)
+    vi = VI(ci.value)
+    if haskey(vds, vi) && vi in _get_moi_variables(sampler)
+        for bset in vds[vi].bound_sets
+            if typeof(bset) === B
+                return bset::B
+            end
+        end
+    end
+    error("Invalid constraint index '$(ci.value)'; There are $(length(_bound_constraint_variables(sampler, B))) constraints")
 end
 
 function MOI.get(
@@ -1968,35 +2194,48 @@ function MOI.get(
 ) where {T,S<:Real}
     vi = _fixed_constraint_variable(sampler, ci)
 
-    return MOI.EqualTo(convert(S, _get_fixed_variables(sampler)[vi].value))
+    return MOI.EqualTo(
+        _convert_exact(
+            S,
+            _get_fixed_variables(sampler)[vi].int_value,
+            "fixed constraint value for variable '$vi'",
+        ),
+    )
 end
 
 function MOI.is_valid(
     sampler::AbstractSampler{T},
     ci::MOI.ConstraintIndex{VI,MOI.ZeroOne},
 ) where {T}
-    return 1 <= ci.value <= length(_domain_constraint_variables(sampler, :bool))
+    return VI(ci.value) in _domain_constraint_variables(sampler, :bool)
 end
 
 function MOI.is_valid(
     sampler::AbstractSampler{T},
     ci::MOI.ConstraintIndex{VI,Spin},
 ) where {T}
-    return 1 <= ci.value <= length(_domain_constraint_variables(sampler, :spin))
+    return VI(ci.value) in _domain_constraint_variables(sampler, :spin)
 end
 
 function MOI.is_valid(
     sampler::AbstractSampler{T},
     ci::MOI.ConstraintIndex{VI,MOI.Integer},
 ) where {T}
-    return 1 <= ci.value <= length(_integer_constraint_variables(sampler))
+    return VI(ci.value) in _integer_constraint_variables(sampler)
+end
+
+function MOI.is_valid(
+    sampler::AbstractSampler{T},
+    ci::MOI.ConstraintIndex{VI,B},
+) where {T,B<:Union{MOI.Interval{<:Real},MOI.GreaterThan{<:Real},MOI.LessThan{<:Real}}}
+    return VI(ci.value) in _bound_constraint_variables(sampler, B)
 end
 
 function MOI.is_valid(
     sampler::AbstractSampler{T},
     ci::MOI.ConstraintIndex{VI,MOI.EqualTo{S}},
 ) where {T,S<:Real}
-    return 1 <= ci.value <= length(_fixed_constraint_variables(sampler, S))
+    return VI(ci.value) in _fixed_constraint_variables(sampler, S)
 end
 
 function MOI.supports(::AbstractSampler{T}, ::MOIB.ListOfNonstandardBridges{S}) where {T,S}

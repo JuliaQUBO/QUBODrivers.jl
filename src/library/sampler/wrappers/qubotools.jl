@@ -116,7 +116,14 @@ function QUBOTools.value(
             p = poly_obj.polynomial
             vars = MP.variables(p)
             isempty(vars) && return convert(T, _constant_coefficient(p))
-            return convert(T, p(vars => ψ))
+            active_vars = _active_polynomial_variables(p)
+            eval_vals = T[
+                (vars[i] in active_vars && ψ[i] isa Integer) ?
+                    _convert_exact(T, ψ[i], "state value for variable '$(poly_obj.variables[i])'") :
+                    convert(T, ψ[i])
+                for i in eachindex(vars)
+            ]
+            return convert(T, p(vars => eval_vals))
         end
     end
 
