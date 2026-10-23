@@ -411,9 +411,11 @@ mutable struct MIPControlledBackend{T} <: MOI.AbstractOptimizer
     objective::Union{Nothing,MIP_SAF{T}}
     termination_status::MOI.TerminationStatusCode
     primal_status::MOI.ResultStatusCode
+    dual_status::MOI.ResultStatusCode
     primal_values::Union{Nothing,Vector{Float64}}
     objective_value::Any
     objective_bound::Any
+    dual_objective_value::Any
     relative_gap::Any
     throw_on_optimize::Bool
     time_limit::Union{Nothing,Float64}
@@ -425,9 +427,11 @@ mutable struct MIPControlledBackend{T} <: MOI.AbstractOptimizer
     function MIPControlledBackend{T}(;
         termination_status::MOI.TerminationStatusCode = MOI.OPTIMAL,
         primal_status::MOI.ResultStatusCode = MOI.FEASIBLE_POINT,
+        dual_status::MOI.ResultStatusCode = MOI.NO_SOLUTION,
         primal_values::Union{Nothing,Vector{Float64}} = nothing,
         objective_value = :auto,
         objective_bound = 0.0,
+        dual_objective_value = :unsupported,
         relative_gap = nothing,
         throw_on_optimize::Bool = false,
     ) where {T}
@@ -437,9 +441,11 @@ mutable struct MIPControlledBackend{T} <: MOI.AbstractOptimizer
             nothing,
             termination_status,
             primal_status,
+            dual_status,
             primal_values,
             objective_value,
             objective_bound,
+            dual_objective_value,
             relative_gap,
             throw_on_optimize,
             nothing,
@@ -531,7 +537,7 @@ end
 
 MOI.get(b::MIPControlledBackend, ::MOI.TerminationStatus) = b.termination_status
 MOI.get(b::MIPControlledBackend, ::MOI.PrimalStatus) = b.primal_status
-MOI.get(::MIPControlledBackend, ::MOI.DualStatus) = MOI.NO_SOLUTION
+MOI.get(b::MIPControlledBackend, ::MOI.DualStatus) = b.dual_status
 
 function _eval_backend_affine(b::MIPControlledBackend{T}) where {T}
     f = b.objective
@@ -569,6 +575,8 @@ end
 function MOI.get(b::MIPControlledBackend{T}, attr::MOI.ObjectiveValue) where {T}
     if b.objective_value === :unsupported
         throw(MOI.GetAttributeNotAllowed(attr, "ObjectiveValue unsupported"))
+    elseif b.objective_value === :throw_error
+        error("controlled backend ObjectiveValue internal failure")
     elseif b.objective_value === :auto
         return _eval_backend_affine(b)
     elseif isnothing(b.objective_value)
@@ -581,14 +589,28 @@ end
 function MOI.get(b::MIPControlledBackend{T}, attr::MOI.ObjectiveBound) where {T}
     if b.objective_bound === :unsupported || isnothing(b.objective_bound)
         throw(MOI.GetAttributeNotAllowed(attr, "ObjectiveBound unavailable"))
+    elseif b.objective_bound === :throw_error
+        error("controlled backend ObjectiveBound internal failure")
     else
         return b.objective_bound
+    end
+end
+
+function MOI.get(b::MIPControlledBackend{T}, attr::MOI.DualObjectiveValue) where {T}
+    if b.dual_objective_value === :unsupported || isnothing(b.dual_objective_value)
+        throw(MOI.GetAttributeNotAllowed(attr, "DualObjectiveValue unavailable"))
+    elseif b.dual_objective_value === :throw_error
+        error("controlled backend DualObjectiveValue internal failure")
+    else
+        return b.dual_objective_value
     end
 end
 
 function MOI.get(b::MIPControlledBackend{T}, attr::MOI.RelativeGap) where {T}
     if b.relative_gap === :unsupported || isnothing(b.relative_gap)
         throw(MOI.GetAttributeNotAllowed(attr, "RelativeGap unavailable"))
+    elseif b.relative_gap === :throw_error
+        error("controlled backend RelativeGap internal failure")
     else
         return b.relative_gap
     end
@@ -726,10 +748,11 @@ function _test_mip_sampler_controlled_outcomes()
                 # In MAX_SENSE, raw MIP min bound -6.25 translates to upper bound +6.25
                 @test MOI.get(model, MOI.ObjectiveBound()) ≈ 6.25
                 @test_throws MOI.GetAttributeNotAllowed MOI.get(model, MOI.RelativeGap())
-                @test_throws Exception MOI.get(model, MOI.ObjectiveValue())
-                @test_throws Exception MOI.get(model, MOI.ObjectiveValue(1))
-                @test_throws Exception MOI.get(model, MOI.VariablePrimal(1), x[1])
-                @test_throws Exception MOI.get(raw, QUBODrivers.QUBOTools_MOI.NumberOfReads(1))
+                @test_throws MOI.ResultIndexBoundsError MOI.get(model, MOI.ObjectiveValue())
+                @test_throws MOI.ResultIndexBoundsError MOI.get(model, MOI.ObjectiveValue(1))
+                @test_throws MOI.ResultIndexBoundsError MOI.get(model, MOI.VariablePrimal(1), x[1])
+                @test_throws MOI.ResultIndexBoundsError MOI.get(model, MOI.VariablePrimal(1), x)
+                @test_throws MOI.ResultIndexBoundsError MOI.get(raw, QUBODrivers.QUBOTools_MOI.NumberOfReads(1))
 
                 # Agreement with retained metadata and zero emitted counts
                 @test metadata["termination_status"] == limit_status
@@ -800,6 +823,65 @@ function _test_mip_sampler_controlled_outcomes()
             end
         end
 
+        @testset "Unavailable RelativeGap (NaN / Inf / GLPK presolve) preserves valid solve and bound" begin
+            for gap_spec in (NaN, Inf, -Inf, :unsupported, nothing)
+                factory = () -> MIPControlledBackend(
+                    termination_status = MOI.OPTIMAL,
+                    primal_status      = MOI.FEASIBLE_POINT,
+                    primal_values      = [1.0, 1.0],
+                    objective_bound    = -3.5,
+                    relative_gap       = gap_spec,
+                )
+                model, x = _build_controlled_qubo_model(factory)
+                MOI.optimize!(model)
+
+                raw = MOI.get(model, MOI.RawSolver())
+                metadata = QUBOTools.metadata(QUBOTools.solution(raw))
+
+                @test MOI.get(model, MOI.TerminationStatus()) == MOI.OPTIMAL
+                @test MOI.get(model, MOI.ResultCount()) == 1
+                @test MOI.get(model, MOI.PrimalStatus()) == MOI.FEASIBLE_POINT
+                @test MOI.get(model, MOI.ObjectiveValue(1)) ≈ -3.5
+                @test MOI.get(model, MOI.ObjectiveBound()) ≈ -3.5
+                @test round.(Int, MOI.get(model, MOI.VariablePrimal(1), x)) == [1, 1]
+                @test_throws MOI.GetAttributeNotAllowed MOI.get(model, MOI.RelativeGap())
+                @test !haskey(metadata, "relative_gap")
+                @test metadata["bound"]["relative_gap"] === nothing
+                @test metadata["bound"]["relative_gap_definition"] === nothing
+            end
+
+            # Real GLPK with presolve enabled on 1-variable minimization where RelativeGap() is NaN
+            presolve_opt = MOI.OptimizerWithAttributes(
+                GLPK.Optimizer,
+                MOI.Silent() => true,
+                "presolve" => GLPK.GLP_ON,
+            )
+            model, x = _build_mip_test_model(Float64, 1; optimizer = presolve_opt)
+            MOI.set(model, MOI.RelativeGapTolerance(), 1e-12)
+            MOI.set(model, MOI.AbsoluteGapTolerance(), 1e-12)
+            MOI.set(model, MOI.ObjectiveFunction{VI}(), x[1])
+            MOI.optimize!(model)
+
+            raw = MOI.get(model, MOI.RawSolver())
+            metadata = QUBOTools.metadata(QUBOTools.solution(raw))
+
+            @test MOI.get(model, MOI.TerminationStatus()) == MOI.OPTIMAL
+            @test MOI.get(model, MOI.ResultCount()) == 1
+            @test MOI.get(model, MOI.PrimalStatus()) == MOI.FEASIBLE_POINT
+            @test MOI.get(model, MOI.ObjectiveValue(1)) ≈ 0.0
+            @test MOI.get(model, MOI.ObjectiveBound()) ≈ 0.0
+            @test round.(Int, MOI.get(model, MOI.VariablePrimal(1), x)) == [0]
+            @test_throws MOI.GetAttributeNotAllowed MOI.get(model, MOI.RelativeGap())
+            # GLPK supports neither gap-tolerance attribute: effective tolerances must be nothing,
+            # while requested settings are recorded separately.
+            @test !("MOI.RelativeGapTolerance" in metadata["attributes"]["forwarded"])
+            @test !("MOI.AbsoluteGapTolerance" in metadata["attributes"]["forwarded"])
+            @test metadata["bound"]["relative_gap_tolerance"] === nothing
+            @test metadata["bound"]["absolute_gap_tolerance"] === nothing
+            @test metadata["bound"]["requested_relative_gap_tolerance"] ≈ 1e-12
+            @test metadata["bound"]["requested_absolute_gap_tolerance"] ≈ 1e-12
+        end
+
         @testset "Numerical and error outcomes clear prior successful state" begin
             good_factory = () -> MIPControlledBackend(
                 termination_status = MOI.OPTIMAL,
@@ -810,74 +892,94 @@ function _test_mip_sampler_controlled_outcomes()
             )
 
             bad_factories = [
-                "optimize! exception" => () -> MIPControlledBackend(throw_on_optimize = true),
-                "NUMERICAL_ERROR" => () -> MIPControlledBackend(
+                ("optimize! exception", MOI.OTHER_ERROR) => () -> MIPControlledBackend(throw_on_optimize = true),
+                ("ObjectiveBound getter exception", MOI.OTHER_ERROR) => () -> MIPControlledBackend(
+                    termination_status = MOI.OPTIMAL,
+                    primal_status      = MOI.FEASIBLE_POINT,
+                    primal_values      = [1.0, 1.0],
+                    objective_bound    = :throw_error,
+                ),
+                ("RelativeGap getter exception", MOI.OTHER_ERROR) => () -> MIPControlledBackend(
+                    termination_status = MOI.OPTIMAL,
+                    primal_status      = MOI.FEASIBLE_POINT,
+                    primal_values      = [1.0, 1.0],
+                    objective_bound    = -3.5,
+                    relative_gap       = :throw_error,
+                ),
+                ("ObjectiveValue getter exception", MOI.OTHER_ERROR) => () -> MIPControlledBackend(
+                    termination_status = MOI.OPTIMAL,
+                    primal_status      = MOI.FEASIBLE_POINT,
+                    primal_values      = [1.0, 1.0],
+                    objective_value    = :throw_error,
+                    objective_bound    = -3.5,
+                ),
+                ("NUMERICAL_ERROR", MOI.NUMERICAL_ERROR) => () -> MIPControlledBackend(
                     termination_status = MOI.NUMERICAL_ERROR,
                     primal_status      = MOI.NO_SOLUTION,
                 ),
-                "INVALID_MODEL" => () -> MIPControlledBackend(
+                ("INVALID_MODEL", MOI.INVALID_MODEL) => () -> MIPControlledBackend(
                     termination_status = MOI.INVALID_MODEL,
                     primal_status      = MOI.NO_SOLUTION,
                 ),
-                "INFEASIBLE" => () -> MIPControlledBackend(
+                ("INFEASIBLE", MOI.INFEASIBLE) => () -> MIPControlledBackend(
                     termination_status = MOI.INFEASIBLE,
                     primal_status      = MOI.NO_SOLUTION,
                 ),
-                "DUAL_INFEASIBLE" => () -> MIPControlledBackend(
+                ("DUAL_INFEASIBLE", MOI.DUAL_INFEASIBLE) => () -> MIPControlledBackend(
                     termination_status = MOI.DUAL_INFEASIBLE,
                     primal_status      = MOI.NO_SOLUTION,
                 ),
-                "OTHER_ERROR" => () -> MIPControlledBackend(
+                ("OTHER_ERROR", MOI.OTHER_ERROR) => () -> MIPControlledBackend(
                     termination_status = MOI.OTHER_ERROR,
                     primal_status      = MOI.NO_SOLUTION,
                 ),
-                "OPTIMAL without primal" => () -> MIPControlledBackend(
+                ("OPTIMAL without primal", MOI.OTHER_ERROR) => () -> MIPControlledBackend(
                     termination_status = MOI.OPTIMAL,
                     primal_status      = MOI.NO_SOLUTION,
                 ),
-                "TIME_LIMIT with INFEASIBLE_POINT" => () -> MIPControlledBackend(
+                ("TIME_LIMIT with INFEASIBLE_POINT", MOI.OTHER_ERROR) => () -> MIPControlledBackend(
                     termination_status = MOI.TIME_LIMIT,
                     primal_status      = MOI.INFEASIBLE_POINT,
                     primal_values      = [1.0, 1.0],
                 ),
-                "NaN ObjectiveBound" => () -> MIPControlledBackend(
+                ("NaN ObjectiveBound", MOI.NUMERICAL_ERROR) => () -> MIPControlledBackend(
                     termination_status = MOI.OPTIMAL,
                     primal_status      = MOI.FEASIBLE_POINT,
                     primal_values      = [1.0, 1.0],
                     objective_bound    = NaN,
                 ),
-                "+Inf minimization ObjectiveBound" => () -> MIPControlledBackend(
+                ("+Inf minimization ObjectiveBound", MOI.NUMERICAL_ERROR) => () -> MIPControlledBackend(
                     termination_status = MOI.OPTIMAL,
                     primal_status      = MOI.FEASIBLE_POINT,
                     primal_values      = [1.0, 1.0],
                     objective_bound    = Inf,
                 ),
-                "Inconsistent bound > incumbent" => () -> MIPControlledBackend(
+                ("Inconsistent bound > incumbent", MOI.NUMERICAL_ERROR) => () -> MIPControlledBackend(
                     termination_status = MOI.TIME_LIMIT,
                     primal_status      = MOI.FEASIBLE_POINT,
                     primal_values      = [1.0, 1.0], # objective is -3.5
                     objective_bound    = -1.0,       # claims min >= -1.0 > -3.5
                 ),
-                "NaN VariablePrimal" => () -> MIPControlledBackend(
+                ("NaN VariablePrimal", MOI.NUMERICAL_ERROR) => () -> MIPControlledBackend(
                     termination_status = MOI.OPTIMAL,
                     primal_status      = MOI.FEASIBLE_POINT,
                     primal_values      = [NaN, 1.0],
                     objective_bound    = -3.5,
                 ),
-                "Out-of-range VariablePrimal" => () -> MIPControlledBackend(
+                ("Out-of-range VariablePrimal", MOI.NUMERICAL_ERROR) => () -> MIPControlledBackend(
                     termination_status = MOI.OPTIMAL,
                     primal_status      = MOI.FEASIBLE_POINT,
                     primal_values      = [2.5, 1.0],
                     objective_bound    = -3.5,
                 ),
-                "NaN ObjectiveValue" => () -> MIPControlledBackend(
+                ("NaN ObjectiveValue", MOI.NUMERICAL_ERROR) => () -> MIPControlledBackend(
                     termination_status = MOI.OPTIMAL,
                     primal_status      = MOI.FEASIBLE_POINT,
                     primal_values      = [1.0, 1.0],
                     objective_value    = NaN,
                     objective_bound    = -3.5,
                 ),
-                "Negative RelativeGap" => () -> MIPControlledBackend(
+                ("Negative RelativeGap", MOI.NUMERICAL_ERROR) => () -> MIPControlledBackend(
                     termination_status = MOI.OPTIMAL,
                     primal_status      = MOI.FEASIBLE_POINT,
                     primal_values      = [1.0, 1.0],
@@ -886,7 +988,7 @@ function _test_mip_sampler_controlled_outcomes()
                 ),
             ]
 
-            for (label, bad_factory) in bad_factories
+            for ((label, expected_status), bad_factory) in bad_factories
                 @testset "$label" begin
                     model, x = _build_controlled_qubo_model(good_factory)
                     MOI.optimize!(model)
@@ -900,14 +1002,113 @@ function _test_mip_sampler_controlled_outcomes()
                     raw = MOI.get(model, MOI.RawSolver())
                     @test MOI.get(model, MOI.ResultCount()) == 0
                     @test MOI.get(model, MOI.PrimalStatus()) == MOI.NO_SOLUTION
-                    @test MOI.get(model, MOI.TerminationStatus()) != MOI.OPTIMAL
-                    @test MOI.get(raw, MOI.TerminationStatus()) != MOI.OPTIMAL
+                    @test MOI.get(model, MOI.TerminationStatus()) == expected_status
+                    @test MOI.get(raw, MOI.TerminationStatus()) == expected_status
                     @test_throws MOI.GetAttributeNotAllowed MOI.get(model, MOI.ObjectiveBound())
                     @test_throws MOI.GetAttributeNotAllowed MOI.get(model, MOI.RelativeGap())
-                    @test_throws Exception MOI.get(model, MOI.ObjectiveValue(1))
-                    @test_throws Exception MOI.get(model, MOI.VariablePrimal(1), x[1])
+                    @test_throws MOI.ResultIndexBoundsError MOI.get(model, MOI.ObjectiveValue(1))
+                    @test_throws MOI.ResultIndexBoundsError MOI.get(model, MOI.VariablePrimal(1), x[1])
+                    @test_throws MOI.ResultIndexBoundsError MOI.get(model, MOI.VariablePrimal(1), x)
                 end
             end
+        end
+
+        @testset "Narrower coefficient type (Float32) conversion and overflow validation" begin
+            sampler32 = MIPSampler.Optimizer{Float32}()
+            src32 = MOI.Utilities.UniversalFallback(MOI.Utilities.Model{Float32}())
+            x32, _ = MOI.add_constrained_variables(src32, fill(MOI.ZeroOne(), 1))
+            MOI.set(src32, MOI.ObjectiveSense(), MOI.MIN_SENSE)
+            MOI.set(src32, MOI.ObjectiveFunction{VI}(), x32[1])
+            MOI.copy_to(sampler32, src32)
+
+            # Valid Float32 solve
+            MOI.set(
+                sampler32,
+                MIPSampler.MIPOptimizer(),
+                () -> MIPControlledBackend{Float32}(
+                    termination_status = MOI.OPTIMAL,
+                    primal_status      = MOI.FEASIBLE_POINT,
+                    primal_values      = [0.0],
+                    objective_bound    = 0.0,
+                    relative_gap       = 0.0,
+                ),
+            )
+            MOI.optimize!(sampler32)
+            @test MOI.get(sampler32, MOI.TerminationStatus()) == MOI.OPTIMAL
+            @test MOI.get(sampler32, MOI.ObjectiveValue(1)) === 0.0f0
+            @test MOI.get(sampler32, MOI.ObjectiveBound()) === 0.0f0
+            @test MOI.get(sampler32, MOI.RelativeGap()) === 0.0f0
+            @test MOI.get(sampler32, MOI.VariablePrimal(1), x32) == Float32[0.0f0]
+
+            # Overflowing bound (1e100 -> Inf32), gap, or objective value must be rejected as NUMERICAL_ERROR
+            for (label, factory32) in [
+                "Float32 bound overflow" => () -> MIPControlledBackend{Float32}(
+                    termination_status = MOI.OPTIMAL,
+                    primal_status      = MOI.FEASIBLE_POINT,
+                    primal_values      = [0.0],
+                    objective_bound    = 1e100,
+                ),
+                "Float32 gap overflow" => () -> MIPControlledBackend{Float32}(
+                    termination_status = MOI.OPTIMAL,
+                    primal_status      = MOI.FEASIBLE_POINT,
+                    primal_values      = [0.0],
+                    objective_bound    = 0.0,
+                    relative_gap       = 1e100,
+                ),
+                "Float32 objective value overflow" => () -> MIPControlledBackend{Float32}(
+                    termination_status = MOI.OPTIMAL,
+                    primal_status      = MOI.FEASIBLE_POINT,
+                    primal_values      = [0.0],
+                    objective_value    = 1e100,
+                    objective_bound    = 0.0,
+                ),
+            ]
+                MOI.set(
+                    sampler32,
+                    MIPSampler.MIPOptimizer(),
+                    () -> MIPControlledBackend{Float32}(
+                        termination_status = MOI.OPTIMAL,
+                        primal_status      = MOI.FEASIBLE_POINT,
+                        primal_values      = [0.0],
+                        objective_bound    = 0.0,
+                        relative_gap       = 0.0,
+                    ),
+                )
+                MOI.optimize!(sampler32)
+                @test MOI.get(sampler32, MOI.TerminationStatus()) == MOI.OPTIMAL
+
+                MOI.set(sampler32, MIPSampler.MIPOptimizer(), factory32)
+                @test_throws Exception MOI.optimize!(sampler32)
+                @test MOI.get(sampler32, MOI.TerminationStatus()) == MOI.NUMERICAL_ERROR
+                @test MOI.get(sampler32, MOI.ResultCount()) == 0
+                @test_throws MOI.GetAttributeNotAllowed MOI.get(sampler32, MOI.ObjectiveBound())
+                @test_throws MOI.GetAttributeNotAllowed MOI.get(sampler32, MOI.RelativeGap())
+            end
+
+            # 0-variable dual bound fallback overflow on Float32
+            const_sampler32 = MIPSampler.Optimizer{Float32}()
+            const_src32 = MOI.Utilities.UniversalFallback(MOI.Utilities.Model{Float32}())
+            cx32, _ = MOI.add_constrained_variables(const_src32, fill(MOI.ZeroOne(), 1))
+            MOI.add_constraint(const_src32, cx32[1], MOI.EqualTo(1.0f0))
+            MOI.set(const_src32, MOI.ObjectiveSense(), MOI.MIN_SENSE)
+            MOI.set(const_src32, MOI.ObjectiveFunction{VI}(), cx32[1])
+            MOI.copy_to(const_sampler32, const_src32)
+            MOI.set(
+                const_sampler32,
+                MIPSampler.MIPOptimizer(),
+                () -> MIPControlledBackend{Float32}(
+                    termination_status   = MOI.OPTIMAL,
+                    primal_status        = MOI.FEASIBLE_POINT,
+                    dual_status          = MOI.FEASIBLE_POINT,
+                    primal_values        = Float64[],
+                    objective_bound      = -Inf,
+                    dual_objective_value = 1e100,
+                ),
+            )
+            @test_throws Exception MOI.optimize!(const_sampler32)
+            @test MOI.get(const_sampler32, MOI.TerminationStatus()) == MOI.NUMERICAL_ERROR
+            @test MOI.get(const_sampler32, MOI.ResultCount()) == 0
+            @test_throws MOI.GetAttributeNotAllowed MOI.get(const_sampler32, MOI.ObjectiveBound())
         end
     end
 
@@ -1122,10 +1323,23 @@ function _test_mip_sampler_state_invalidation()
         @test MOI.get(sampler, MOI.PrimalStatus()) == MOI.NO_SOLUTION
         @test_throws MOI.GetAttributeNotAllowed MOI.get(sampler, MOI.ObjectiveBound())
         @test_throws MOI.GetAttributeNotAllowed MOI.get(sampler, MOI.RelativeGap())
-        @test_throws Exception MOI.get(sampler, MOI.ObjectiveValue(1))
+        @test_throws MOI.ResultIndexBoundsError MOI.get(sampler, MOI.ObjectiveValue(1))
+
+        # Direct coefficient mutation invalidates QUBOTools.solution(sampler) immediately
+        # even before any MOI getter is called
+        empty!(sampler.fixed_variables)
+        MOI.optimize!(sampler)
+        @test !isempty(QUBOTools.solution(sampler))
+        @test haskey(QUBOTools.metadata(QUBOTools.solution(sampler)), "objective_bound")
+        sampler.model.form.L.data[1] = -10.0
+        @test isempty(QUBOTools.solution(sampler))
+        @test isempty(QUBOTools.metadata(QUBOTools.solution(sampler)))
+        @test MOI.get(sampler, MOI.TerminationStatus()) == MOI.OPTIMIZE_NOT_CALLED
+        @test MOI.get(sampler, MOI.ResultCount()) == 0
+        @test_throws MOI.GetAttributeNotAllowed MOI.get(sampler, MOI.ObjectiveBound())
+        sampler.model.form.L.data[1] = -4.0
 
         # Re-solving and then replacing model via QUBODrivers.set_model!(sampler, copy(sampler.model))
-        empty!(sampler.fixed_variables)
         MOI.optimize!(sampler)
         @test MOI.get(sampler, MOI.ObjectiveBound()) ≈ -4.0
         QUBODrivers.set_model!(sampler, copy(QUBOTools.backend(sampler)))
@@ -1164,6 +1378,23 @@ function _test_mip_sampler_state_invalidation()
         @test MOI.get(sampler, MOI.TerminationStatus()) == MOI.OPTIMAL
         @test MOI.get(sampler, MOI.ObjectiveBound()) ≈ -4.0
         @test MOI.get(sampler, MOI.RelativeGap()) ≈ 0.0
+
+        # Mutating the problem scope inside PostSampleCallback invalidates the solve result and bound
+        MOI.set(
+            sampler,
+            QUBODrivers.PostSampleCallback(),
+            (_, s) -> (s.model.form.L.data[1] = -10.0; nothing),
+        )
+        MOI.optimize!(sampler)
+        @test isempty(QUBOTools.solution(sampler))
+        @test isempty(QUBOTools.metadata(QUBOTools.solution(sampler)))
+        @test MOI.get(sampler, MOI.TerminationStatus()) == MOI.OPTIMIZE_NOT_CALLED
+        @test MOI.get(sampler, MOI.ResultCount()) == 0
+        @test MOI.get(sampler, MOI.PrimalStatus()) == MOI.NO_SOLUTION
+        @test_throws MOI.GetAttributeNotAllowed MOI.get(sampler, MOI.ObjectiveBound())
+        @test_throws MOI.GetAttributeNotAllowed MOI.get(sampler, MOI.RelativeGap())
+        @test_throws MOI.ResultIndexBoundsError MOI.get(sampler, MOI.ObjectiveValue(1))
+        sampler.model.form.L.data[1] = -4.0
 
         # Transforming callback replacing the sample downgrades OPTIMAL -> LOCALLY_SOLVED and clears relative_gap
         MOI.set(sampler, QUBODrivers.PostSampleTransform(), true)

@@ -50,12 +50,15 @@ independently re-evaluated on the full QUBO objective. `MIPSampler` ignores
 
 ## Objective Bounds, Gaps, and Limit Terminations
 
-- When the MIP backend reports a finite objective bound, `MIPSampler` translates
+- **Objective bounds and gaps (`MOI.ObjectiveBound`, `MOI.RelativeGap`):**
+  When the MIP backend reports a finite objective bound, `MIPSampler` translates
   it back to the caller's original objective sense (`MOI.MIN_SENSE` or
   `MOI.MAX_SENSE`), variable domain (`MOI.ZeroOne` or `QUBODrivers.Spin`),
   scaling, constant offset, and fixed-variable (`MOI.EqualTo`) conditioning, and
   exposes it via `MOI.ObjectiveBound()` as well as `metadata["objective_bound"]`
-  and `metadata["bound"]`.
+  and `metadata["bound"]`. If no finite objective bound is available for the
+  current solve state, `MOI.get(model, MOI.ObjectiveBound())` throws
+  `MOI.GetAttributeNotAllowed{MOI.ObjectiveBound}`.
 - **Scope:** The bound applies to the supplied QUBO/Ising objective, possibly
   conditioned on any fixed variables in the model. A bound on a penalized QUBO
   relaxation is not automatically a valid bound on an original constrained
@@ -64,21 +67,33 @@ independently re-evaluated on the full QUBO objective. `MIPSampler` ignores
   tolerance-dependent** quantities, not exact-arithmetic certificates. Do not
   treat them as exact proofs in certified preprocessing without a separate
   verification layer, and do not infer global optimality from a small observed
-  gap when `MOI.TerminationStatus()` is not `MOI.OPTIMAL`.
+  gap when `MOI.TerminationStatus()` is not `MOI.OPTIMAL`. Effective gap
+  tolerances in `metadata["bound"]` are recorded only when confirmed by backend
+  readback or attribute forwarding; requested sampler settings are stored
+  separately under `requested_relative_gap_tolerance` and
+  `requested_absolute_gap_tolerance`.
 - **Relative gap:** When an incumbent and a bound are both present and the
-  backend reports `MOI.RelativeGap()`, `MIPSampler` exposes that solver-dependent
-  value through `MOI.RelativeGap()` and `metadata["relative_gap"]` (labeled
-  `"backend_solver_dependent"` in `metadata["bound"]["relative_gap_definition"]`).
-  It is not interchangeable with a gap recomputed from the rounded incumbent,
-  and a primal-free result has no finite incumbent gap.
-- **Primal-free limit terminations:** If the backend stops on a normal limit or
-  interruption (`MOI.TIME_LIMIT`, `MOI.NODE_LIMIT`, `MOI.ITERATION_LIMIT`,
-  `MOI.SOLUTION_LIMIT`, `MOI.MEMORY_LIMIT`, `MOI.OBJECTIVE_LIMIT`,
-  `MOI.NORM_LIMIT`, `MOI.OTHER_LIMIT`, or `MOI.INTERRUPTED`) without a feasible
-  incumbent, `MIPSampler` returns an empty `SampleSet` (`MOI.ResultCount() == 0`,
-  `MOI.PrimalStatus() == MOI.NO_SOLUTION`) while preserving
-  `MOI.TerminationStatus()`, `MOI.ObjectiveBound()` (when available), and solve
-  timing metadata.
+  backend reports a finite `MOI.RelativeGap()`, `MIPSampler` exposes that
+  solver-dependent value through `MOI.RelativeGap()` and
+  `metadata["relative_gap"]` (labeled `"backend_solver_dependent"` in
+  `metadata["bound"]["relative_gap_definition"]`). It is not interchangeable
+  with a gap recomputed from the rounded incumbent, and when no finite gap is
+  available (including primal-free results or backends that return `NaN`/`Inf`),
+  `MOI.get(model, MOI.RelativeGap())` throws
+  `MOI.GetAttributeNotAllowed{MOI.RelativeGap}`.
+- **Primal-free limit terminations vs. failures:** If the backend stops on a
+  normal limit or interruption (`MOI.TIME_LIMIT`, `MOI.NODE_LIMIT`,
+  `MOI.ITERATION_LIMIT`, `MOI.SOLUTION_LIMIT`, `MOI.MEMORY_LIMIT`,
+  `MOI.OBJECTIVE_LIMIT`, `MOI.NORM_LIMIT`, `MOI.OTHER_LIMIT`, or
+  `MOI.INTERRUPTED`) without a feasible incumbent, `MIPSampler` returns an empty
+  `SampleSet` (`MOI.ResultCount() == 0`, `MOI.PrimalStatus() == MOI.NO_SOLUTION`)
+  while preserving `MOI.TerminationStatus()`, `MOI.ObjectiveBound()` (when
+  available), and solve timing metadata. Conversely, numerical validation
+  failures (`NaN` or unrepresentable bounds/objectives/gaps, inconsistent
+  `bound > incumbent`, invalid primal values) and backend solve errors throw an
+  exception from `MOI.optimize!`, clear any prior results (`MOI.ResultCount() == 0`,
+  `MOI.PrimalStatus() == MOI.NO_SOLUTION`), and set `MOI.TerminationStatus()` to
+  `MOI.NUMERICAL_ERROR` or `MOI.OTHER_ERROR` (or the backend's failure status).
 
 ## Attributes
 - `MIPOptimizer`, `"mip_optimizer"`: MOI-compatible optimizer factory used to
@@ -158,36 +173,89 @@ function MOI.set(sampler::Optimizer, attr::raw_attr"moi/absolutegaptolerance", v
     return nothing
 end
 
-function _solve_scope_signature(sampler::Optimizer{T})::UInt64 where {T}
-    h = hash((
-        objectid(QUBOTools.backend(sampler)),
-        QUBOTools.sense(sampler),
-        QUBOTools.domain(sampler),
-        QUBOTools.scale(sampler),
-        QUBOTools.offset(sampler),
-        QUBOTools.variables(sampler),
-        QUBODrivers._get_moi_variables(sampler),
-    ))
+struct _NumericalValidationError <: Exception
+    msg::String
+end
 
-    for item in QUBOTools.linear_terms(sampler)
+Base.showerror(io::IO, err::_NumericalValidationError) = print(io, err.msg)
+
+_numerical_error(msg::AbstractString) = throw(_NumericalValidationError(String(msg)))
+
+const _UNAVAILABLE_ATTRIBUTE_ERRORS = Union{
+    MOI.UnsupportedAttribute,
+    MOI.GetAttributeNotAllowed,
+    MOI.ResultIndexBoundsError,
+}
+
+function _hash_form(
+    form::QUBOTools.Form{T,QUBOTools.SparseLinearForm{T},QUBOTools.SparseQuadraticForm{T}},
+    h::UInt64,
+)::UInt64 where {T}
+    L_data = form.L.data
+    Q_data = form.Q.data
+    h = hash(form.n, h)
+    h = hash(form.α, h)
+    h = hash(form.β, h)
+    h = hash(form.frame.sense, h)
+    h = hash(form.frame.domain, h)
+    h = hash(L_data.n, h)
+    h = hash(L_data.nzind, h)
+    h = hash(L_data.nzval, h)
+    h = hash(Q_data.m, h)
+    h = hash(Q_data.n, h)
+    h = hash(Q_data.colptr, h)
+    h = hash(Q_data.rowval, h)
+    h = hash(Q_data.nzval, h)
+    return h
+end
+
+function _hash_form(form::QUBOTools.AbstractForm, h::UInt64)::UInt64
+    h = hash(QUBOTools.dimension(form), h)
+    h = hash(QUBOTools.scale(form), h)
+    h = hash(QUBOTools.offset(form), h)
+    h = hash(QUBOTools.sense(form), h)
+    h = hash(QUBOTools.domain(form), h)
+    for item in QUBOTools.linear_terms(form)
         h = xor(h, hash((:linear, item)))
     end
-
-    for item in QUBOTools.quadratic_terms(sampler)
+    for item in QUBOTools.quadratic_terms(form)
         h = xor(h, hash((:quadratic, item)))
     end
-
-    for (vi, fv) in QUBODrivers._get_fixed_variables(sampler)
-        h = xor(h, hash((:fixed, vi, fv.value, fv.set_type)))
-    end
-
     return h
+end
+
+function _hash_model(model::QUBOTools.Model{VI,T,Int,F}, h::UInt64)::UInt64 where {T,F}
+    h = hash(objectid(model), h)
+    h = hash(model.variable_map.inv, h)
+    return _hash_form(model.form, h)
+end
+
+function _solve_scope_signature(sampler::Optimizer{T})::UInt64 where {T}
+    h = _hash_model(sampler.model, UInt64(0))
+    h = hash(sampler.moi_variables, h)
+    for (vi, fv) in sampler.fixed_variables
+        h = xor(h, hash(vi.value, hash(fv.value, objectid(fv.set_type))))
+    end
+    return h
+end
+
+function _reset_unoptimized_solution!(sampler::Optimizer{T}) where {T}
+    QUBOTools.attach!(
+        sampler,
+        SampleSet{T,Int}(;
+            sense  = QUBOTools.sense(sampler),
+            domain = QUBOTools.domain(sampler),
+        ),
+    )
+
+    return nothing
 end
 
 function _clear_stale_solution!(
     sampler::Optimizer{T};
     termination_status::MOI.TerminationStatusCode = MOI.OTHER_ERROR,
     status::String = "error",
+    solved_scope::UInt64 = _solve_scope_signature(sampler),
 ) where {T}
     QUBOTools.attach!(
         sampler,
@@ -197,7 +265,7 @@ function _clear_stale_solution!(
                 "termination_status" => termination_status,
                 "primal_status"      => MOI.NO_SOLUTION,
                 "result_count"       => 0,
-                _SOLVE_SCOPE_KEY     => _solve_scope_signature(sampler),
+                _SOLVE_SCOPE_KEY     => solved_scope,
             ),
             sense  = QUBOTools.sense(sampler),
             domain = QUBOTools.domain(sampler),
@@ -208,23 +276,20 @@ function _clear_stale_solution!(
 end
 
 function _active_solution(sampler::Optimizer{T}) where {T}
-    ω = QUBOTools.solution(sampler)
+    backend_model = QUBOTools.backend(sampler)
+    ω = QUBOTools.solution(backend_model)
     metadata = QUBOTools.metadata(ω)
 
     if haskey(metadata, _SOLVE_SCOPE_KEY) &&
        metadata[_SOLVE_SCOPE_KEY] != _solve_scope_signature(sampler)
-        QUBOTools.attach!(
-            sampler,
-            SampleSet{T,Int}(;
-                sense  = QUBOTools.sense(sampler),
-                domain = QUBOTools.domain(sampler),
-            ),
-        )
-        return QUBOTools.solution(sampler)
+        _reset_unoptimized_solution!(sampler)
+        return QUBOTools.solution(backend_model)
     end
 
     return ω
 end
+
+QUBOTools.solution(sampler::Optimizer{T}) where {T} = _active_solution(sampler)
 
 function _is_post_sample_transformed(metadata::AbstractDict)
     postprocess = get(metadata, "postprocess", nothing)
@@ -232,10 +297,15 @@ function _is_post_sample_transformed(metadata::AbstractDict)
     return callback isa AbstractDict && get(callback, "transformed", false) === true
 end
 
-function _sync_post_optimize_metadata!(sampler::Optimizer{T}) where {T}
-    ω = QUBOTools.solution(sampler)
+function _sync_post_optimize_metadata!(sampler::Optimizer{T}, solved_scope::UInt64) where {T}
+    if _solve_scope_signature(sampler) != solved_scope
+        _reset_unoptimized_solution!(sampler)
+        return nothing
+    end
+
+    ω = QUBOTools.solution(QUBOTools.backend(sampler))
     metadata = QUBOTools.metadata(ω)
-    metadata[_SOLVE_SCOPE_KEY] = _solve_scope_signature(sampler)
+    metadata[_SOLVE_SCOPE_KEY] = solved_scope
     metadata["result_count"] = length(ω)
     metadata["primal_status"] = isempty(ω) ? MOI.NO_SOLUTION : MOI.FEASIBLE_POINT
 
@@ -274,9 +344,10 @@ function MOI.copy_to(sampler::Optimizer{T}, src::MOI.ModelLike) where {T}
 end
 
 function MOI.optimize!(sampler::Optimizer{T}) where {T}
-    _clear_stale_solution!(sampler)
+    solved_scope = _solve_scope_signature(sampler)
+    _clear_stale_solution!(sampler; solved_scope = solved_scope)
     QUBODrivers._sample!(sampler)
-    _sync_post_optimize_metadata!(sampler)
+    _sync_post_optimize_metadata!(sampler, solved_scope)
 
     return nothing
 end
@@ -392,6 +463,26 @@ function _forward_common_attributes!(backend, sampler::Optimizer)
     )
 
     return forwarded
+end
+
+function _effective_tolerance(
+    backend,
+    sampler::Optimizer,
+    attr,
+    label::String,
+    forwarded::Vector{String},
+)::Union{Nothing,Float64}
+    val = _backend_attribute(backend, attr)
+    if val isa Real && isfinite(val) && val >= zero(val)
+        return Float64(val)
+    elseif label in forwarded
+        req = MOI.get(sampler, attr)
+        if req isa Real && isfinite(req) && req >= zero(req)
+            return Float64(req)
+        end
+    end
+
+    return nothing
 end
 
 _affine(::Type{T}, terms::Vector{SAT{T}}, constant::T = zero(T)) where {T} =
@@ -512,7 +603,7 @@ function _solution_state(backend, x)
     for (idx, xi) in enumerate(x)
         val = MOI.get(backend, MOI.VariablePrimal(), xi)
         if !(val isa Real && isfinite(val) && -0.5 <= val <= 1.5)
-            error("MIP backend returned an invalid binary variable primal value: $(val)")
+            _numerical_error("MIP backend returned an invalid binary variable primal value: $(val)")
         end
         state[idx] = val >= 0.5 ? 1 : 0
     end
@@ -523,9 +614,25 @@ end
 function _backend_attribute(backend, attr)
     try
         return MOI.get(backend, attr)
-    catch
-        return nothing
+    catch err
+        if err isa _UNAVAILABLE_ATTRIBUTE_ERRORS
+            return nothing
+        end
+        rethrow(err)
     end
+end
+
+function _checked_convert(::Type{T}, val::Real, label::AbstractString)::T where {T}
+    isfinite(val) || _numerical_error("MIP backend reported a non-finite $(label): $(val)")
+    converted = try
+        convert(T, val)
+    catch
+        _numerical_error("MIP backend $(label) ($(val)) cannot be converted to $(T)")
+    end
+    isfinite(converted) || _numerical_error(
+        "MIP backend $(label) ($(val)) overflows or is not finitely representable in $(T)",
+    )
+    return converted
 end
 
 function _extract_raw_min_bound(backend, n::Integer, ::Type{T})::Union{Nothing,T} where {T}
@@ -534,32 +641,48 @@ function _extract_raw_min_bound(backend, n::Integer, ::Type{T})::Union{Nothing,T
     if isnothing(raw_val)
         return nothing
     elseif !(raw_val isa Real)
-        error("MIP backend returned a non-numeric objective bound: $(raw_val)")
+        _numerical_error("MIP backend returned a non-numeric objective bound: $(raw_val)")
     elseif isnan(raw_val) || raw_val == Inf
-        error("MIP backend reported an invalid minimization objective bound: $(raw_val)")
+        _numerical_error("MIP backend reported an invalid minimization objective bound: $(raw_val)")
     elseif raw_val == -Inf
         if n == 0 && _backend_attribute(backend, MOI.DualStatus()) == MOI.FEASIBLE_POINT
             dual_val = _backend_attribute(backend, MOI.DualObjectiveValue())
-            if dual_val isa Real && isfinite(dual_val)
-                b = convert(T, dual_val)
-                return iszero(b) ? zero(T) : b
+            if !isnothing(dual_val)
+                if !(dual_val isa Real)
+                    _numerical_error("MIP backend returned a non-numeric dual objective bound: $(dual_val)")
+                elseif isnan(dual_val) || dual_val == Inf
+                    _numerical_error("MIP backend reported an invalid dual objective bound: $(dual_val)")
+                elseif dual_val != -Inf
+                    b = _checked_convert(T, dual_val, "dual objective bound")
+                    return iszero(b) ? zero(T) : b
+                end
             end
         end
         return nothing
     else
-        b = convert(T, raw_val)
+        b = _checked_convert(T, raw_val, "objective bound")
         return iszero(b) ? zero(T) : b
     end
 end
 
 function _validate_bound_against_incumbent(raw_bound::T, λ_min::T) where {T}
-    FT = float(T)
+    if !(isfinite(raw_bound) && isfinite(λ_min))
+        _numerical_error(
+            "MIP backend bound ($(raw_bound)) or incumbent objective ($(λ_min)) is non-finite",
+        )
+    end
+    FT = promote_type(Float64, float(T))
     b = FT(raw_bound)
     v = FT(λ_min)
-    tol = max(FT(1e-5), sqrt(eps(FT))) * max(one(FT), abs(v), abs(b))
+    if !(isfinite(b) && isfinite(v))
+        _numerical_error(
+            "MIP backend bound ($(raw_bound)) or incumbent objective ($(λ_min)) is non-finite",
+        )
+    end
+    tol = max(FT(1e-5), sqrt(eps(float(T)))) * max(one(FT), abs(v), abs(b))
 
     if b > v + tol
-        error(
+        _numerical_error(
             "MIP backend reported an inconsistent minimization objective bound " *
             "($(raw_bound)) exceeding the evaluated feasible objective ($(λ_min))",
         )
@@ -570,35 +693,42 @@ end
 
 function _translate_objective_bound(::Type{T}, raw_bound::T, sense::QUBOTools.Sense) where {T}
     bound = sense === QUBOTools.Min ? raw_bound : -raw_bound
+    isfinite(bound) || _numerical_error(
+        "Translated MIP objective bound ($(bound)) is not finitely representable in $(T)",
+    )
     return iszero(bound) ? zero(T) : bound
 end
 
 function _extract_relative_gap(
     backend,
+    n::Integer,
     has_incumbent::Bool,
     has_bound::Bool,
     ::Type{T},
 )::Union{Nothing,T} where {T}
-    has_incumbent || return nothing
+    (has_incumbent && n > 0) || return nothing
 
     raw_gap = _backend_attribute(backend, MOI.RelativeGap())
     isnothing(raw_gap) && return nothing
 
     if !(raw_gap isa Real)
-        error("MIP backend returned a non-numeric relative gap: $(raw_gap)")
-    elseif isnan(raw_gap) || raw_gap < -1e-5
-        error("MIP backend reported an invalid relative gap: $(raw_gap)")
-    elseif !has_bound || !isfinite(raw_gap)
+        _numerical_error("MIP backend returned a non-numeric relative gap: $(raw_gap)")
+    elseif !isfinite(raw_gap)
+        return nothing
+    elseif raw_gap < -1e-5
+        _numerical_error("MIP backend reported an invalid relative gap: $(raw_gap)")
+    elseif !has_bound
         return nothing
     end
 
     clamped = max(zero(raw_gap), raw_gap)
-    gap = convert(T, clamped)
+    gap = _checked_convert(T, clamped, "relative gap")
     return iszero(gap) ? zero(T) : gap
 end
 
 function QUBODrivers.sample(sampler::Optimizer{T}) where {T}
-    _clear_stale_solution!(sampler)
+    solved_scope = _solve_scope_signature(sampler)
+    _clear_stale_solution!(sampler; solved_scope = solved_scope)
     optimizer = _require_mip_optimizer(sampler)
     n, L, Q, α, β = QUBOTools.qubo(sampler, :dict; sense = :min, domain = :bool)
 
@@ -625,6 +755,7 @@ function QUBODrivers.sample(sampler::Optimizer{T}) where {T}
             sampler;
             termination_status = failed_status,
             status             = string(termination_status),
+            solved_scope       = solved_scope,
         )
         rethrow(err)
     end
@@ -635,13 +766,16 @@ function QUBODrivers.sample(sampler::Optimizer{T}) where {T}
     try
         if has_incumbent
             raw_obj = _backend_attribute(backend, MOI.ObjectiveValue())
-            if !isnothing(raw_obj) && !(raw_obj isa Real && isfinite(raw_obj))
-                error("MIP backend reported a non-finite objective value: $(raw_obj)")
+            if !isnothing(raw_obj)
+                if !(raw_obj isa Real && isfinite(raw_obj))
+                    _numerical_error("MIP backend reported a non-finite objective value: $(raw_obj)")
+                end
+                _checked_convert(T, raw_obj, "objective value")
             end
 
             ψ = _solution_state(backend, x)
             λ = QUBOTools.value(ψ, L, Q, α, β)
-            isfinite(λ) || error("Evaluated QUBO objective is non-finite: $(λ)")
+            isfinite(λ) || _numerical_error("Evaluated QUBO objective is non-finite: $(λ)")
             λ_min = λ
             push!(samples, Sample{T,Int}(ψ, λ))
         end
@@ -655,7 +789,7 @@ function QUBODrivers.sample(sampler::Optimizer{T}) where {T}
         objective_bound =
             isnothing(raw_bound) ? nothing : _translate_objective_bound(T, raw_bound, caller_sense)
         relative_gap =
-            _extract_relative_gap(backend, has_incumbent, !isnothing(objective_bound), T)
+            _extract_relative_gap(backend, n, has_incumbent, !isnothing(objective_bound), T)
 
         emitted_reads = has_incumbent ? 1 : 0
         metadata = QUBODrivers._sampler_metadata(
@@ -679,31 +813,41 @@ function QUBODrivers.sample(sampler::Optimizer{T}) where {T}
         metadata["result_count"] = emitted_reads
         metadata["attributes"] = Dict{String,Any}("forwarded" => forwarded_attributes)
 
-        rel_gap_tol = _backend_attribute(backend, MOI.RelativeGapTolerance())
-        if isnothing(rel_gap_tol)
-            rel_gap_tol = MOI.get(sampler, MOI.RelativeGapTolerance())
-        end
-        abs_gap_tol = _backend_attribute(backend, MOI.AbsoluteGapTolerance())
-        if isnothing(abs_gap_tol)
-            abs_gap_tol = MOI.get(sampler, MOI.AbsoluteGapTolerance())
-        end
+        requested_rel_gap_tol = MOI.get(sampler, MOI.RelativeGapTolerance())
+        requested_abs_gap_tol = MOI.get(sampler, MOI.AbsoluteGapTolerance())
+        rel_gap_tol = _effective_tolerance(
+            backend,
+            sampler,
+            MOI.RelativeGapTolerance(),
+            "MOI.RelativeGapTolerance",
+            forwarded_attributes,
+        )
+        abs_gap_tol = _effective_tolerance(
+            backend,
+            sampler,
+            MOI.AbsoluteGapTolerance(),
+            "MOI.AbsoluteGapTolerance",
+            forwarded_attributes,
+        )
 
         fixed_count = length(QUBODrivers._get_fixed_variables(sampler))
         metadata["bound"] = Dict{String,Any}(
-            "value"                   => objective_bound,
-            "raw_mip_min_bound"       => raw_bound,
-            "sense"                   => String(caller_sense),
-            "domain"                  => String(QUBOTools.domain(sampler)),
-            "scope"                   => iszero(fixed_count) ?
-                                         "supplied_qubo" :
-                                         "supplied_qubo_conditioned_on_fixed_variables",
-            "fixed_variables"         => fixed_count,
-            "provenance"              => "backend_reported_tolerance_dependent",
-            "certified_exact"         => false,
-            "relative_gap"            => relative_gap,
-            "relative_gap_definition" => isnothing(relative_gap) ? nothing : "backend_solver_dependent",
-            "relative_gap_tolerance"  => rel_gap_tol,
-            "absolute_gap_tolerance"  => abs_gap_tol,
+            "value"                            => objective_bound,
+            "raw_mip_min_bound"                => raw_bound,
+            "sense"                            => String(caller_sense),
+            "domain"                           => String(QUBOTools.domain(sampler)),
+            "scope"                            => iszero(fixed_count) ?
+                                                   "supplied_qubo" :
+                                                   "supplied_qubo_conditioned_on_fixed_variables",
+            "fixed_variables"                  => fixed_count,
+            "provenance"                       => "backend_reported_tolerance_dependent",
+            "certified_exact"                  => false,
+            "relative_gap"                     => relative_gap,
+            "relative_gap_definition"          => isnothing(relative_gap) ? nothing : "backend_solver_dependent",
+            "relative_gap_tolerance"           => rel_gap_tol,
+            "absolute_gap_tolerance"           => abs_gap_tol,
+            "requested_relative_gap_tolerance" => requested_rel_gap_tol,
+            "requested_absolute_gap_tolerance" => requested_abs_gap_tol,
         )
 
         if !isnothing(objective_bound)
@@ -713,15 +857,25 @@ function QUBODrivers.sample(sampler::Optimizer{T}) where {T}
             metadata["relative_gap"] = relative_gap
         end
 
-        metadata[_SOLVE_SCOPE_KEY] = _solve_scope_signature(sampler)
+        metadata[_SOLVE_SCOPE_KEY] = solved_scope
 
         return SampleSet{T}(samples, metadata; sense = :min, domain = :bool)
     catch err
-        _clear_stale_solution!(
-            sampler;
-            termination_status = MOI.NUMERICAL_ERROR,
-            status             = "NUMERICAL_ERROR",
-        )
+        if err isa _NumericalValidationError
+            _clear_stale_solution!(
+                sampler;
+                termination_status = MOI.NUMERICAL_ERROR,
+                status             = "NUMERICAL_ERROR",
+                solved_scope       = solved_scope,
+            )
+        else
+            _clear_stale_solution!(
+                sampler;
+                termination_status = MOI.OTHER_ERROR,
+                status             = "error",
+                solved_scope       = solved_scope,
+            )
+        end
         rethrow(err)
     end
 end
@@ -741,7 +895,7 @@ function MOI.get(sampler::Optimizer{T}, ::MOI.SolveTimeSec) where {T}
 end
 
 function MOI.get(sampler::Optimizer{T}, nr::QUBODrivers.QUBOTools_MOI.NumberOfReads) where {T}
-    _active_solution(sampler)
+    MOI.check_result_index_bounds(sampler, nr)
     return invoke(
         MOI.get,
         Tuple{QUBODrivers.AbstractSampler{T},QUBODrivers.QUBOTools_MOI.NumberOfReads},
@@ -756,12 +910,12 @@ function MOI.get(sampler::Optimizer{T}, ps::MOI.PrimalStatus) where {T}
 end
 
 function MOI.get(sampler::Optimizer{T}, ov::MOI.ObjectiveValue) where {T}
-    _active_solution(sampler)
+    MOI.check_result_index_bounds(sampler, ov)
     return invoke(MOI.get, Tuple{QUBODrivers.AbstractSampler{T},MOI.ObjectiveValue}, sampler, ov)
 end
 
 function MOI.get(sampler::Optimizer{T}, vp::MOI.VariablePrimal, vi::VI) where {T}
-    _active_solution(sampler)
+    MOI.check_result_index_bounds(sampler, vp)
     return invoke(
         MOI.get,
         Tuple{QUBODrivers.AbstractSampler{T},MOI.VariablePrimal,VI},
@@ -769,6 +923,30 @@ function MOI.get(sampler::Optimizer{T}, vp::MOI.VariablePrimal, vi::VI) where {T
         vp,
         vi,
     )
+end
+
+function MOI.get(
+    sampler::Optimizer{T},
+    vp::MOI.VariablePrimal,
+    vis::Vector{VI},
+) where {T}
+    ω = _active_solution(sampler)
+    m = length(ω)
+    i = vp.result_index
+    if !(1 <= i <= m)
+        throw(MOI.ResultIndexBoundsError(vp, m))
+    end
+    fixed_vars = QUBODrivers._get_fixed_variables(sampler)
+    out = Vector{T}(undef, length(vis))
+    for (k, vi) in enumerate(vis)
+        if haskey(fixed_vars, vi)
+            out[k] = fixed_vars[vi].value
+        else
+            j = QUBOTools.index(sampler, vi)
+            out[k] = convert(T, QUBOTools.state(ω, i, j))
+        end
+    end
+    return out
 end
 
 function MOI.get(sampler::Optimizer{T}, attr::MOI.ObjectiveBound) where {T}

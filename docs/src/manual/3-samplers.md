@@ -133,28 +133,50 @@ caller's original objective sense, variable domain, scaling, constant offset, an
 fixed-variable conditioning) separately from any incumbent:
 
 - **Interrupted with an incumbent:** `result_count(model) == 1` and
-  `primal_status(model) == MOI.FEASIBLE_POINT`. Both `objective_value(model)` (the
-  rounded binary state's re-evaluated QUBO objective) and `objective_bound(model)`
-  (the backend-reported bound) are available, along with `relative_gap(model)` if
-  the backend reports `MOI.RelativeGap()`.
+  `primal_status(model) == MOI.FEASIBLE_POINT`. `objective_value(model)` returns
+  the rounded binary state's re-evaluated QUBO objective. `objective_bound(model)`
+  and `relative_gap(model)` return the backend-reported bound and relative gap
+  when available, or throw `MOI.GetAttributeNotAllowed` if the backend did not
+  report a finite value.
 - **Interrupted without an incumbent:** `result_count(model) == 0` and
   `primal_status(model) == MOI.NO_SOLUTION`. `MIPSampler` returns an empty
   `SampleSet` (with zero emitted reads and the consumed solve time) rather than
-  throwing, so callers can still inspect `termination_status(model)` and
-  `objective_bound(model)`:
+  throwing, so callers can still inspect `termination_status(model)`,
+  `solve_time(model)`, and `objective_bound(model)` (when the backend reported a
+  finite bound). Querying `objective_value(model)` or `value.(x)` throws
+  `MOI.ResultIndexBoundsError`, and querying `relative_gap(model)` throws
+  `MOI.GetAttributeNotAllowed{MOI.RelativeGap}`.
+- **Numerical or backend failures:** Unlike normal limit terminations, invalid
+  numerical backend outputs (such as `NaN` or unrepresentable bounds, inconsistent
+  `bound > incumbent`, or out-of-range binary primals) and backend solve errors
+  throw an exception from `optimize!(model)`, clear any prior results
+  (`result_count(model) == 0`, `primal_status(model) == MOI.NO_SOLUTION`), and
+  set `termination_status(model)` to `MOI.NUMERICAL_ERROR` or `MOI.OTHER_ERROR`
+  (or the backend's failure status).
 
 ```julia
 MOI = QUBODrivers.MOI
+set_time_limit_sec(model, 0.001)
+
+try
+    optimize!(model)
+catch err
+    # Numerical validation or backend failure: prior results are cleared,
+    # and `termination_status(model)` reflects `MOI.NUMERICAL_ERROR` or `MOI.OTHER_ERROR`.
+    @warn "MIP solve failed" exception = err status = termination_status(model)
+end
 
 status = MOI.get(model, MOI.TerminationStatus())
-bound  = MOI.get(model, MOI.ObjectiveBound())
+raw_metadata = QUBOTools.metadata(QUBOTools.solution(MOI.get(model, MOI.RawSolver())))
+bound = get(raw_metadata, "objective_bound", nothing) # or catch MOI.GetAttributeNotAllowed on MOI.ObjectiveBound()
 
 if MOI.get(model, MOI.ResultCount()) > 0
     incumbent_val   = MOI.get(model, MOI.ObjectiveValue(1))
-    incumbent_state = round.(Int, MOI.get.(model, MOI.VariablePrimal(1), x))
+    incumbent_state = round.(Int, MOI.get(model, MOI.VariablePrimal(1), backend_variables))
+    gap             = get(raw_metadata, "relative_gap", nothing)
 else
-    # Primal-free limit termination (MOI.PrimalStatus() == MOI.NO_SOLUTION):
-    # no incumbent or finite relative gap, but `bound` and timing remain available.
+    # Primal-free limit termination (MOI.PrimalStatus() == MOI.NO_SOLUTION) or failed solve:
+    # no incumbent or finite relative gap, but `bound` (if reported) and timing remain available.
 end
 ```
 
