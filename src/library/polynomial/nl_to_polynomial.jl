@@ -228,15 +228,6 @@ function _to_polynomial!(
         a, b = _to_polynomial!.(Ref(d), T, operands)
         return _checked_power(expr, a, b)
     elseif _is_operator(expr, :/) && length(operands) == 2
-        denom_vars = MOI.VariableIndex[]
-        _collect_expr_variables!(denom_vars, operands[2])
-        if !isempty(denom_vars)
-            throw(
-                InvalidNLExpression(
-                    "Cannot convert `$(expr)` to a polynomial: non-constant denominator in operator `/`.",
-                ),
-            )
-        end
         a, b = _to_polynomial!.(Ref(d), T, operands)
         return _checked_div(T, a, b)
     elseif _is_variable(expr)

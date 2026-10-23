@@ -290,19 +290,6 @@ function test_invalid_nl_expression_errors()
                 ),
                 "/",
             ),
-            (
-                MOI.ScalarNonlinearFunction(
-                    :/,
-                    Any[
-                        1.0,
-                        MOI.ScalarNonlinearFunction(
-                            :+,
-                            Any[MOI.ScalarNonlinearFunction(:-, Any[x, x]), 2.0],
-                        ),
-                    ],
-                ),
-                "/",
-            ),
             (MOI.ScalarNonlinearFunction(:/, Any[1.0, x]), "/"),
             (MOI.ScalarNonlinearFunction(:/, Any[x, 0.0]), "/"),
             (MOI.ScalarNonlinearFunction(:/, Any[1.0, 0.0]), "/"),
@@ -333,7 +320,7 @@ function test_invalid_nl_expression_errors()
             @test_throws QUBODrivers.InvalidNLExpression MOI.copy_to(sampler, src)
         end
 
-        # Constant scalar division (x * y) / 2.0 is a valid polynomial
+        # Constant scalar division (x * y) / 2.0 and x / ((y - y) + 2.0) are valid polynomials
         valid_div = MOI.ScalarNonlinearFunction(
             :/,
             Any[MOI.ScalarNonlinearFunction(:*, Any[x, y]), 2.0],
@@ -341,6 +328,21 @@ function test_invalid_nl_expression_errors()
         spf_div = QUBODrivers.polynomial_function(valid_div, Float64)
         @test MP.maxdegree(spf_div.polynomial) == 2
         @test only(MP.coefficients(spf_div.polynomial)) == 0.5
+
+        simplified_const_div = MOI.ScalarNonlinearFunction(
+            :/,
+            Any[
+                x,
+                MOI.ScalarNonlinearFunction(
+                    :+,
+                    Any[MOI.ScalarNonlinearFunction(:-, Any[y, y]), 2.0],
+                ),
+            ],
+        )
+        spf_simp = QUBODrivers.polynomial_function(simplified_const_div, Float64)
+        @test spf_simp.variables == [x]
+        @test MP.maxdegree(spf_simp.polynomial) == 1
+        @test only(MP.coefficients(spf_simp.polynomial)) == 0.5
     end
 
     return nothing
