@@ -119,6 +119,28 @@ function test_cubic_jump_objective_fixture()
         @test_throws ArgumentError QUBOTools.qubo(sampler)
         @test_throws ArgumentError QUBOTools.ising(sampler)
         @test_throws ArgumentError QUBOTools.form(sampler)
+        @test_throws ArgumentError QUBOTools.linear_form(sampler)
+        @test_throws ArgumentError QUBOTools.quadratic_form(sampler)
+        @test_throws ArgumentError QUBOTools.linear_terms(sampler)
+        @test_throws ArgumentError QUBOTools.quadratic_terms(sampler)
+        @test_throws ArgumentError QUBOTools.linear_size(sampler)
+        @test_throws ArgumentError QUBOTools.quadratic_size(sampler)
+        @test_throws ArgumentError QUBOTools.topology(sampler)
+
+        # State evaluation on degree-3 objective evaluates the stored polynomial
+        poly_vars = MP.variables(p)
+        for state in (
+            [0, 0, 0],
+            [1, 0, 0],
+            [0, 1, 1],
+            [1, 1, 0],
+            [1, 1, 1],
+        )
+            @test QUBOTools.value(sampler, state) ≈ p(poly_vars => Float64.(state))
+        end
+        @test QUBOTools.value(sampler, 1) ≈ 2.75
+        @test_throws DimensionMismatch QUBOTools.value(sampler, [1, 1])
+        @test_throws DimensionMismatch QUBOTools.value(sampler, [1, 1, 1, 1])
 
         # Out-of-order expression and omitted middle variable still preserve model variable order
         model_order = JuMP.Model(_TestPolySampler.Optimizer)
@@ -260,6 +282,27 @@ function test_invalid_nl_expression_errors()
             (MOI.ScalarNonlinearFunction(:cos, Any[x]), "cos"),
             (MOI.ScalarNonlinearFunction(:exp, Any[x]), "exp"),
             (MOI.ScalarNonlinearFunction(:/, Any[x, y]), "/"),
+            (MOI.ScalarNonlinearFunction(:/, Any[x, x]), "/"),
+            (
+                MOI.ScalarNonlinearFunction(
+                    :/,
+                    Any[MOI.ScalarNonlinearFunction(:^, Any[x, 2]), x],
+                ),
+                "/",
+            ),
+            (
+                MOI.ScalarNonlinearFunction(
+                    :/,
+                    Any[
+                        1.0,
+                        MOI.ScalarNonlinearFunction(
+                            :+,
+                            Any[MOI.ScalarNonlinearFunction(:-, Any[x, x]), 2.0],
+                        ),
+                    ],
+                ),
+                "/",
+            ),
             (MOI.ScalarNonlinearFunction(:/, Any[1.0, x]), "/"),
             (MOI.ScalarNonlinearFunction(:/, Any[x, 0.0]), "/"),
             (MOI.ScalarNonlinearFunction(:/, Any[1.0, 0.0]), "/"),
@@ -364,6 +407,34 @@ function test_polyjump_functions_and_bridges()
         end
         @test f_sub.variables == [x1, x2]
         @test MOI.constant(f_sub) == 6.0
+
+        # MOI.Utilities.map_indices with non-identity (reordering) variable map
+        f_mapped = MOI.Utilities.map_indices(f_saf) do vi
+            return vi == x1 ? VI(20) : VI(10)
+        end
+        @test f_mapped.variables == [VI(10), VI(20)]
+        @test MOI.constant(f_mapped) == 1.0
+        @test f_mapped.polynomial(MP.variables(f_mapped.polynomial) => [5.0, 7.0]) ≈
+              2.0 * 5.0 + 3.0 * 7.0 + 1.0
+
+        # Standard MOI.copy_to between UniversalFallback caches with ScalarPolynomialFunction
+        dst_cache = MOIU.UniversalFallback(MOIU.Model{Float64}())
+        src_cache = MOIU.UniversalFallback(MOIU.Model{Float64}())
+        src_v = MOI.add_variables(src_cache, 3)
+        cubic_spf = convert(
+            F,
+            MOI.ScalarNonlinearFunction(
+                :+,
+                Any[MOI.ScalarNonlinearFunction(:*, Any[4.0, src_v[1], src_v[2], src_v[3]]), 1.5],
+            ),
+        )
+        MOI.set(src_cache, MOI.ObjectiveSense(), MOI.MIN_SENSE)
+        MOI.set(src_cache, MOI.ObjectiveFunction{F}(), cubic_spf)
+        idx_map = MOI.copy_to(dst_cache, src_cache)
+        copied_spf = MOI.get(dst_cache, MOI.ObjectiveFunction{F}())
+        @test copied_spf.variables == [idx_map[vi] for vi in src_v]
+        @test MOI.constant(copied_spf) == 1.5
+        @test copied_spf.polynomial(MP.variables(copied_spf.polynomial) => [1.0, 1.0, 1.0]) ≈ 5.5
 
         # ToPolynomialBridge
         inner = MOIU.UniversalFallback(MOIU.Model{Float64}())

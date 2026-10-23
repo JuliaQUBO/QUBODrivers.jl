@@ -193,6 +193,19 @@ function MOI.Utilities.substitute_variables(
     return _scalar_polynomial(d, T, new_poly)
 end
 
+function MOI.Utilities.map_indices(
+    index_map::Function,
+    func::ScalarPolynomialFunction{T,P},
+) where {T,P}
+    isempty(func.variables) && return copy(func)
+    return MOI.Utilities.substitute_variables(func) do vi
+        return MOI.ScalarAffineFunction(
+            [MOI.ScalarAffineTerm(one(T), index_map(vi))],
+            zero(T),
+        )
+    end
+end
+
 function MOI.Utilities.is_coefficient_type(
     ::Type{<:ScalarPolynomialFunction{T}},
     ::Type{S},

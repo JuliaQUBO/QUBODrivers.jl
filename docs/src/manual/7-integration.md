@@ -143,14 +143,16 @@ QUBODrivers.supports_polynomial_objective(::Type{<:Optimizer}) = true
 When enabled, the sampler accepts `MOI.ScalarNonlinearFunction` and
 [`QUBODrivers.ScalarPolynomialFunction`](@ref) objectives in addition to linear
 and quadratic MOI objectives. Inside [`QUBODrivers.sample`](@ref), call
-[`QUBODrivers.polynomial_objective`](@ref) (or
-[`QUBODrivers.polynomial_function`](@ref)) to retrieve a
-`MultivariatePolynomials.AbstractPolynomial` over the free variables in
-`QUBOTools.variables(sampler)` order, with fixed variables substituted and
-constant offsets preserved. Non-polynomial operators (such as `sin`, `/`, or
-non-integer/negative `^`) throw [`QUBODrivers.InvalidNLExpression`](@ref).
-Samplers that do not opt in keep `supports_polynomial_objective == false` and
-remain on the quadratic QUBO/Ising lowering path.
+[`QUBODrivers.polynomial_objective`](@ref) to retrieve a
+`MultivariatePolynomials.AbstractPolynomial{T}` over the free variables in
+`QUBOTools.variables(sampler)` order (or
+[`QUBODrivers.polynomial_function`](@ref) to retrieve the MOI
+[`QUBODrivers.ScalarPolynomialFunction`](@ref) wrapper), with fixed variables
+substituted and constant offsets preserved. Non-polynomial operators (such as
+`sin`, division `/` by zero or a non-constant expression, or non-integer/negative
+`^`) throw [`QUBODrivers.InvalidNLExpression`](@ref). Samplers that do not opt in
+keep `supports_polynomial_objective == false` and remain on the quadratic
+QUBO/Ising lowering path.
 
 ## Package a sampler interface
 
