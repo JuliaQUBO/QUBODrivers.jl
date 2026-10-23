@@ -140,20 +140,51 @@ struct _PolynomialObjective{T}
     has_nonbinary_domains::Bool
 end
 
+function _is_exact_in(::Type{T}, val::Real)::Bool where {T<:Real}
+    isnan(val) && return false
+    if !isfinite(val)
+        return T <: AbstractFloat
+    end
+    tval = try
+        convert(T, val)
+    catch
+        return false
+    end
+    isfinite(tval) || return false
+    if val isa Integer && T <: Integer
+        return BigInt(tval) == BigInt(val)
+    elseif val isa Integer || isinteger(val)
+        return isinteger(tval) && BigInt(tval) == BigInt(val)
+    else
+        return Rational{BigInt}(tval) == Rational{BigInt}(val)
+    end
+end
+
 function _convert_exact(
     ::Type{T},
-    val::Integer,
+    val::Real,
     context::AbstractString = "discrete value",
 )::T where {T<:Real}
-    tval = convert(T, val)
-    if T <: AbstractFloat && (!isfinite(tval) || BigInt(tval) != BigInt(val))
+    if !_is_exact_in(T, val)
         throw(
             ArgumentError(
-                "Integer value '$val' ($context) cannot be represented exactly in type $T.",
+                "Value '$val' ($context) cannot be represented exactly in type $T.",
             ),
         )
     end
-    return tval
+    return convert(T, val)
+end
+
+function _promote_state_for_polynomial_eval(::Type{T}, val::Real) where {T<:Real}
+    if _is_exact_in(T, val)
+        return val
+    elseif _is_exact_in(Float64, val)
+        return Float64(val)
+    elseif val isa Integer
+        return BigInt(val)
+    else
+        return BigFloat(val)
+    end
 end
 
 _fixed_value(fixed_variables::AbstractDict{VI,T}, vi::VI) where {T<:Real} = fixed_variables[vi]
@@ -1697,15 +1728,7 @@ function _build_polynomial_sampler_model(
 ) where {T}
     if MOI.is_empty(src)
         model = QUBOTools.Model{VI,T,Int}(; sense = :min, domain = :bool)
-        poly_obj = _PolynomialObjective{T}(
-            zero(PolyType{T}),
-            VI[],
-            QUBOTools.Min,
-            QUBOTools.BoolDomain,
-            false,
-            false,
-        )
-        return model, poly_obj
+        return model, nothing
     end
 
     _validate_unconstrained_moi_model(

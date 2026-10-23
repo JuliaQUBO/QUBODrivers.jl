@@ -653,6 +653,33 @@ function test_exact_integer_precision_and_zero_variable_models()
         @test MOI.get(dest32, QUBODrivers.VariableEncodingSet(), v_set32) == [big_even_32, big_odd_32]
         @test MOI.get(dest32, MOI.ConstraintSet(), idx_map32[c_eq32]) == MOI.EqualTo(big_odd_32)
 
+        # Promoted polynomial evaluation preserves cancellation across Int and Float64 states
+        src_cancel32 = MOIU.UniversalFallback(MOIU.Model{Float32}())
+        vc32 = MOI.add_variable(src_cancel32)
+        MOI.set(src_cancel32, QUBODrivers.VariableEncodingSet(), vc32, [big_even_32, big_odd_32])
+        MOI.set(src_cancel32, MOI.ObjectiveSense(), MOI.MIN_SENSE)
+        f_cancel32 = MOI.ScalarAffineFunction(
+            [MOI.ScalarAffineTerm(1.0f0, vc32)],
+            -Float32(big_even_32),
+        )
+        MOI.set(src_cancel32, MOI.ObjectiveFunction{typeof(f_cancel32)}(), f_cancel32)
+        dest_cancel32 = _TestFiniteDomainSampler.Optimizer{Float32}()
+        MOI.copy_to(dest_cancel32, src_cancel32)
+        @test QUBODrivers.values_to_levels(dest_cancel32, [Float64(big_odd_32)]) == [1]
+        @test QUBOTools.value(dest_cancel32, [Float64(big_odd_32)]) === 1.0f0
+        @test QUBOTools.value(dest_cancel32, [big_odd_32]) === 1.0f0
+
+        # Non-cancelling objective whose evaluated value cannot be represented in Float32 throws
+        src_nocancel32 = MOIU.UniversalFallback(MOIU.Model{Float32}())
+        vnc32 = MOI.add_variable(src_nocancel32)
+        MOI.set(src_nocancel32, QUBODrivers.VariableEncodingSet(), vnc32, [big_even_32, big_odd_32])
+        MOI.set(src_nocancel32, MOI.ObjectiveSense(), MOI.MIN_SENSE)
+        MOI.set(src_nocancel32, MOI.ObjectiveFunction{VI}(), vnc32)
+        dest_nocancel32 = _TestFiniteDomainSampler.Optimizer{Float32}()
+        MOI.copy_to(dest_nocancel32, src_nocancel32)
+        @test_throws ArgumentError QUBOTools.value(dest_nocancel32, [Float64(big_odd_32)])
+        @test_throws ArgumentError QUBOTools.value(dest_nocancel32, [big_odd_32])
+
         # 3. Wide sparse domain shift check does not materialize range
         src_sparse = MOIU.UniversalFallback(MOIU.Model{Float64}())
         v_sp = MOI.add_variable(src_sparse)
@@ -673,12 +700,28 @@ function test_exact_integer_precision_and_zero_variable_models()
         )
         dest_zero = _TestFiniteDomainSampler.Optimizer{Float64}()
         MOI.copy_to(dest_zero, src_zero)
+        @test !MOI.is_empty(dest_zero)
         @test MOI.get(dest_zero, MOI.ObjectiveSense()) == MOI.MAX_SENSE
         @test QUBOTools.sense(dest_zero) == QUBOTools.Max
         @test QUBODrivers.polynomial_objective(dest_zero) == 7.0
         @test QUBOTools.value(dest_zero, Int[]) == 7.0
         MOI.optimize!(dest_zero)
         @test MOI.get(dest_zero, MOI.ObjectiveValue()) == 7.0
+
+        # 5. Copying an empty source model leaves destination sampler empty (CachingOptimizer lifecycle)
+        for OptType in (
+            QUBODrivers.ExactSampler.Optimizer{Float64},
+            _TestFiniteDomainSampler.Optimizer{Float64},
+        )
+            empty_src = MOIU.Model{Float64}()
+            empty_dst = OptType()
+            @test MOI.is_empty(empty_src)
+            @test MOI.is_empty(empty_dst)
+            MOI.copy_to(empty_dst, empty_src)
+            @test MOI.is_empty(empty_dst)
+            caching_opt = MOIU.CachingOptimizer(MOIU.Model{Float64}(), empty_dst)
+            @test MOI.is_empty(caching_opt)
+        end
     end
 
     return nothing
