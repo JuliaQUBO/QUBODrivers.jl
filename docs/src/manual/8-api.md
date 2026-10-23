@@ -37,6 +37,15 @@ QUBODrivers.validate_metadata
 QUBODrivers.supports_seed
 QUBODrivers.honors_final_reads
 QUBODrivers.enforces_time_limit
+QUBODrivers.supported_domains
+QUBODrivers.supports_domain
+QUBODrivers.VariableEncodingSet
+QUBODrivers.variable_domain
+QUBODrivers.variable_domains
+QUBODrivers.variable_bounds
+QUBODrivers.variable_num_levels
+QUBODrivers.levels_to_values
+QUBODrivers.values_to_levels
 QUBODrivers.supports_polynomial_objective
 QUBODrivers.polynomial_objective
 QUBODrivers.polynomial_function

@@ -204,8 +204,33 @@ Before releasing a driver wrapper, confirm that:
 - `QUBODrivers.honors_final_reads` and
   `QUBODrivers.enforces_time_limit` return `true` only for behavior the driver
   actually guarantees;
+- `QUBODrivers.supported_domains` declares any non-binary discrete variable
+  domains (`:int` for bounded integers, `:set` for explicit finite value sets
+  via [`QUBODrivers.VariableEncodingSet`](@ref)) that the backend supports;
 - `MOI.get(sampler, MOI.SolveTimeSec())` reports effective backend time, while
   wall-clock time is available through `QUBODrivers.total_time`.
+
+## Non-Binary Finite Variable Domains
+
+By default, samplers declare `QUBODrivers.supported_domains(::Type{<:AbstractSampler}) = Set([:bool, :spin])`.
+Backends that natively accept bounded integer variables (`MOI.Integer` with finite bounds)
+or arbitrary finite integer value sets (`QUBODrivers.VariableEncodingSet`) can opt in:
+
+```julia
+QUBODrivers.supported_domains(::Type{<:Optimizer}) = Set([:bool, :spin, :int, :set])
+```
+
+Inside `QUBODrivers.sample(sampler)`:
+
+- [`QUBODrivers.variable_domains`](@ref) returns the ordered finite integer value set
+  $U_i \subseteq \mathbb{Z}$ for each free variable in `QUBOTools.variables(sampler)` order;
+- [`QUBODrivers.variable_bounds`](@ref) and [`QUBODrivers.variable_num_levels`](@ref)
+  return per-variable `(lower, upper)` bounds and level counts $d_i = |U_i|$;
+- [`QUBODrivers.levels_to_values`](@ref) and [`QUBODrivers.values_to_levels`](@ref)
+  translate between zero-based solver levels $0:(d_i - 1)$ and variable values in $U_i$;
+- [`QUBODrivers.polynomial_objective`](@ref) with `shift = true` substitutes
+  $x_i \leftarrow x_i + l_i$ on contiguous integer domains so zero-based integer backends
+  can evaluate coefficients directly on $0:(u_i - l_i)$.
 
 ## A complete example
 

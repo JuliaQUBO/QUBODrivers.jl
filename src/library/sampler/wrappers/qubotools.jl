@@ -21,6 +21,13 @@ function _require_quadratic_objective(sampler::AbstractSampler)
                 "use `QUBODrivers.polynomial_objective(sampler)` instead.",
             ),
         )
+    elseif _has_nonbinary_or_heterogeneous_domains(sampler)
+        throw(
+            ArgumentError(
+                "Cannot extract a binary/spin QUBO or Ising form when variables have non-binary or heterogeneous domains; " *
+                "use `QUBODrivers.polynomial_objective(sampler)` and `QUBODrivers.variable_domains(sampler)` instead.",
+            ),
+        )
     end
 
     return nothing
@@ -94,20 +101,40 @@ function QUBOTools.value(
     sampler::AbstractSampler{T},
     ψ::AbstractVector{<:Real},
 ) where {T}
-    if _has_higher_order_polynomial_objective(sampler)
+    if _has_higher_order_polynomial_objective(sampler) ||
+       _has_nonbinary_or_heterogeneous_domains(sampler)
         poly_obj = _get_polynomial_objective(sampler)
-        n = length(poly_obj.variables)
-        if length(ψ) != n
-            throw(
-                DimensionMismatch(
-                    "State vector length $(length(ψ)) does not match model dimension $n.",
-                ),
-            )
+        if !isnothing(poly_obj)
+            n = length(poly_obj.variables)
+            if length(ψ) != n
+                throw(
+                    DimensionMismatch(
+                        "State vector length $(length(ψ)) does not match model dimension $n.",
+                    ),
+                )
+            end
+            p = poly_obj.polynomial
+            vars = MP.variables(p)
+            isempty(vars) && return convert(T, _constant_coefficient(p))
+            active_vars = _active_polynomial_variables(p)
+            has_inexact_active_state = false
+            eval_vals = [
+                if vars[i] in active_vars
+                    if !_is_exact_in(T, ψ[i])
+                        has_inexact_active_state = true
+                    end
+                    _promote_state_for_polynomial_eval(T, ψ[i])
+                else
+                    zero(T)
+                end
+                for i in eachindex(vars)
+            ]
+            raw_val = p(vars => eval_vals)
+            if has_inexact_active_state && isinteger(raw_val) && !_is_exact_in(T, raw_val)
+                _convert_exact(T, raw_val, "objective value at state")
+            end
+            return convert(T, raw_val)
         end
-        p = poly_obj.polynomial
-        vars = MP.variables(p)
-        isempty(vars) && return convert(T, _constant_coefficient(p))
-        return convert(T, p(vars => ψ))
     end
 
     return QUBOTools.value(QUBOTools.backend(sampler), ψ)

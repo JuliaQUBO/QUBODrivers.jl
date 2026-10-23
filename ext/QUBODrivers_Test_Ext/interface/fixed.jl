@@ -217,7 +217,7 @@ function _test_moi_fixed_variable_contracts(
         Test.@test MOI.get(optimizer, MOI.NumberOfConstraints{VI,MOI.EqualTo{T}}()) == 1
 
         fixed_constraint_indices = MOI.get(optimizer, MOI.ListOfConstraintIndices{VI,MOI.EqualTo{T}}())
-        invalid_fixed_constraint = MOI.ConstraintIndex{VI,MOI.EqualTo{T}}(length(fixed_constraint_indices) + 1)
+        invalid_fixed_constraint = MOI.ConstraintIndex{VI,MOI.EqualTo{T}}(length(x) + 1)
 
         Test.@test length(fixed_constraint_indices) == 1
         Test.@test MOI.is_valid(optimizer, only(fixed_constraint_indices))
