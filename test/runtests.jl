@@ -9,6 +9,7 @@ const VI   = MOI.VariableIndex
 include("assets/test_macro_throws.jl")
 
 include("setup/setup.jl")
+include("setup/citation.jl")
 include("setup/polynomial.jl")
 include("drivers/sampler_bundle.jl")
 
@@ -17,6 +18,7 @@ include("ext/ext.jl")
 function main()
     @testset "◈ ◈ ◈ QUBODrivers.jl Test Suite ◈ ◈ ◈" verbose = true begin
         test_setup_macro()
+        test_citation()
         test_polynomial_objective_bridge()
         test_extensions()
         test_sampler_bundle()
