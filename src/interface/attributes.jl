@@ -97,6 +97,24 @@ raw samples in the emitted solution metadata.
 struct PostSampleTransform <: SamplerAttribute end
 
 @doc raw"""
+    VariableEncodingSet()
+
+MOI variable attribute specifying an explicit finite integer value set
+(`x_i ∈ U_i ⊆ ℤ`) for variable `x_i`, shared with
+`ToQUBO.Attributes.VariableEncodingSet()`.
+
+When set on a variable in a model handed to a sampler that supports the `:set`
+domain (`supports_domain(sampler, :set) == true`), the variable's finite
+domain is `Vector{Int}(U_i)`.
+"""
+struct VariableEncodingSet <: MOI.AbstractVariableAttribute end
+
+_is_variable_encoding_set_attr(::VariableEncodingSet) = true
+_is_variable_encoding_set_attr(attr::MOI.AbstractVariableAttribute) =
+    nameof(typeof(attr)) === :VariableEncodingSet
+_is_variable_encoding_set_attr(::Any) = false
+
+@doc raw"""
     @raw_attr_str("key")
 
 Create a `RawSamplerAttribute` type for dispatch.
@@ -286,6 +304,81 @@ supports_polynomial_objective(::Type{<:AbstractSampler}) = false
 supports_polynomial_objective(sampler::AbstractSampler) =
     supports_polynomial_objective(typeof(sampler))
 
+@doc raw"""
+    supported_domains(sampler_or_type)
+
+Return the collection of variable domains supported by a sampler optimizer.
+
+Defaults to `Set{Symbol}([:bool, :spin])` so existing binary and spin samplers
+remain unchanged. Samplers that natively accept contiguous bounded integer
+variables (`MOI.Integer` with finite bounds) or explicit finite integer value
+sets ([`VariableEncodingSet`](@ref)) may extend this method to include `:int`
+and/or `:set`, for example:
+
+```julia
+QUBODrivers.supported_domains(::Type{<:Optimizer}) = Set([:bool, :spin, :int, :set])
+```
+"""
+supported_domains(::Type{<:AbstractSampler}) =
+    Set{Symbol}([:bool, :spin])
+supported_domains(sampler::AbstractSampler) =
+    supported_domains(typeof(sampler))
+
+function _normalize_domain_tag(domain)
+    if domain === QUBOTools.BoolDomain ||
+       domain === :bool ||
+       domain === MOI.ZeroOne ||
+       domain isa MOI.ZeroOne
+        return :bool
+    elseif domain === QUBOTools.SpinDomain ||
+           domain === :spin ||
+           domain === Spin ||
+           domain isa Spin
+        return :spin
+    elseif domain === :int ||
+           domain === :integer ||
+           domain === MOI.Integer ||
+           domain isa MOI.Integer
+        return :int
+    elseif domain === :set ||
+           domain === VariableEncodingSet ||
+           _is_variable_encoding_set_attr(domain)
+        return :set
+    else
+        throw(
+            ArgumentError(
+                "Unsupported domain identifier '$domain'; expected one of " *
+                "`:bool` (`QUBOTools.BoolDomain`), `:spin` (`QUBOTools.SpinDomain`), " *
+                "`:int`, or `:set`.",
+            ),
+        )
+    end
+end
+
+@doc raw"""
+    supports_domain(sampler_or_type, domain)::Bool
+
+Return whether `sampler_or_type` advertises support for `domain` (`:bool` /
+`QUBOTools.BoolDomain`, `:spin` / `QUBOTools.SpinDomain`, `:int`, or `:set`).
+"""
+function supports_domain(
+    sampler_or_type::Union{AbstractSampler,Type{<:AbstractSampler}},
+    domain,
+)::Bool
+    target = _normalize_domain_tag(domain)
+    for d in supported_domains(sampler_or_type)
+        _normalize_domain_tag(d) === target && return true
+    end
+    return false
+end
+
+function _supports_nonbinary_domains(
+    sampler_or_type::Union{AbstractSampler,Type{<:AbstractSampler}},
+)::Bool
+    return supports_domain(sampler_or_type, :int) ||
+           supports_domain(sampler_or_type, :set)
+end
+
 function _metadata_time(sampleset::SampleSet, key::String)
     metadata = QUBOTools.metadata(sampleset)
     time = get(metadata, "time", nothing)
@@ -344,3 +437,4 @@ MOIU.map_indices(_, ::PostSampleCallback, value) = value
 MOIU.map_indices(_, ::_RawPostSampleCallback, value) = value
 MOIU.map_indices(_, ::PostSampleTransform, value) = value
 MOIU.map_indices(_, ::_RawPostSampleTransform, value) = value
+MOIU.map_indices(_, ::VariableEncodingSet, value) = value

@@ -291,6 +291,17 @@ function _sample!(sampler::AbstractSampler{T}, sampleset::SampleSet{T}, total_ti
     _record_random_seed_metadata!(sampler, metadata)
     _warn_metadata_violations(sampleset)
 
+    if _has_nonbinary_or_heterogeneous_domains(sampler) &&
+       QUBOTools.domain(sampleset) !== QUBOTools.domain(sampler)
+        throw(
+            ArgumentError(
+                "SampleSet returned for a model with non-binary or heterogeneous variable domains " *
+                "must use `domain = :bool` (`QUBOTools.BoolDomain`) so integer sample states are preserved without spin casting, " *
+                "got `$(QUBOTools.domain(sampleset))`.",
+            ),
+        )
+    end
+
     QUBOTools.attach!(sampler, sampleset)
 
     return nothing

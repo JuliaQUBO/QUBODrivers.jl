@@ -8,6 +8,7 @@ function __setup_quote(spec::_SamplerSpec)
             moi_variables::Vector{VI}
             fixed_variables::Dict{VI,QUBODrivers._FixedVariable{T}}
             polynomial_objective::Union{Nothing,QUBODrivers._PolynomialObjective{T}}
+            variable_domains::Dict{VI,QUBODrivers._VariableDomain}
 
             function $(Optimizer){T}() where {T}
                 return new{T}(
@@ -16,6 +17,7 @@ function __setup_quote(spec::_SamplerSpec)
                     VI[],
                     Dict{VI,QUBODrivers._FixedVariable{T}}(),
                     nothing,
+                    Dict{VI,QUBODrivers._VariableDomain}(),
                 )
             end
         end
@@ -258,6 +260,7 @@ function __setup_quote_moi_attrs(spec::_SamplerSpec)
 
         # MOI.VariablePrimalStart - Support
         MOI.supports(::$(Optimizer), ::Union{MOI.VariablePrimalStart, raw_attr"moi/variableprimalstart"}) = true
+        MOI.supports(::$(Optimizer), ::MOI.VariablePrimalStart, ::Type{VI}) = true
     end
 end
 

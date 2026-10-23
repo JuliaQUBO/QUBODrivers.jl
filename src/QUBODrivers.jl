@@ -60,6 +60,9 @@ export FinalNumberOfReads, final_number_of_reads
 export PostSampleCallback, PostSampleTransform, post_sample_callback, post_sample_transform
 export total_time, effective_time, validate_metadata
 export supports_seed, honors_final_reads, enforces_time_limit
+export supported_domains, supports_domain, VariableEncodingSet
+export variable_domains, variable_domain, variable_bounds, variable_num_levels
+export levels_to_values, values_to_levels
 export supports_polynomial_objective, polynomial_objective, polynomial_function, polynomial_type
 export ScalarPolynomialFunction, VectorPolynomialFunction, ToPolynomialBridge, NLToPolynomial, InvalidNLExpression
 export ExactSampler, IdentitySampler, MIPSampler, RandomSampler
