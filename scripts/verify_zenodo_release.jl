@@ -5,6 +5,7 @@ module ZenodoReleaseVerification
 import Downloads
 
 const CONCEPT_RECORD_ID = "7811951"
+const CONCEPT_DOI = "10.5281/zenodo.$CONCEPT_RECORD_ID"
 const DEFAULT_API_URL = "https://zenodo.org/api/records/$CONCEPT_RECORD_ID/versions/latest"
 
 function _skip_ws(s::AbstractString, i::Int, n::Int)
@@ -199,10 +200,26 @@ function check_record(record::AbstractDict, expected_tag::AbstractString)
         )
     end
 
+    raw_doi = get(record, "doi", nothing)
+    version_doi = raw_doi === nothing ? "" : strip(string(raw_doi))
+    if isempty(version_doi)
+        return (
+            ok = false,
+            message = "Zenodo's latest record does not declare a version DOI.",
+            doi = nothing,
+        )
+    elseif version_doi == CONCEPT_DOI
+        return (
+            ok = false,
+            message = "Zenodo's latest record DOI '$version_doi' matches the concept DOI '$CONCEPT_DOI' instead of a distinct version DOI.",
+            doi = version_doi,
+        )
+    end
+
     return (
         ok = true,
-        message = "Zenodo record $(get(record, "doi", "without a DOI")) matches release '$expected_tag'.",
-        doi = get(record, "doi", nothing),
+        message = "Zenodo record $version_doi matches release '$expected_tag'.",
+        doi = version_doi,
     )
 end
 

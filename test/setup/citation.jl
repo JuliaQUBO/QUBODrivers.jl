@@ -278,6 +278,17 @@ function test_citation()
                 Dict{String,Any}("conceptrecid" => "7811951", "metadata" => Dict{String,Any}()),
                 "v0.6.6",
             )
+            missing_doi = ZenodoReleaseVerification.check_record(
+                Dict{String,Any}(
+                    "conceptrecid" => "7811951",
+                    "metadata" => Dict{String,Any}("version" => "v0.6.6"),
+                ),
+                "v0.6.6",
+            )
+            concept_doi_as_version = ZenodoReleaseVerification.check_record(
+                _zenodo_record(; doi = "10.5281/zenodo.7811951"),
+                "v0.6.6",
+            )
 
             @test current.ok
             @test current.doi == "10.5281/zenodo.23420133"
@@ -287,6 +298,10 @@ function test_citation()
             @test occursin("9999999", wrong_concept.message)
             @test !missing_version.ok
             @test occursin("metadata.version", missing_version.message)
+            @test !missing_doi.ok
+            @test occursin("version DOI", missing_doi.message)
+            @test !concept_doi_as_version.ok
+            @test occursin("concept DOI", concept_doi_as_version.message)
 
             responses = Any[_zenodo_record(; version = "v0.6.5"), _zenodo_record()]
             recovered = ZenodoReleaseVerification.verify_release(

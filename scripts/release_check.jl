@@ -2,7 +2,6 @@
 
 module ReleaseCheck
 
-using Pkg
 using TOML
 
 const ROOT = normpath(joinpath(@__DIR__, ".."))
@@ -36,10 +35,6 @@ function read_text(root::AbstractString, parts...)
 end
 
 compat_entries(value::AbstractString) = Set(strip.(split(value, ',')))
-
-function compat_allows(compat::AbstractString, version::VersionNumber)
-    return version in Pkg.Types.semver_spec(compat)
-end
 
 function release_heading_matches(line::AbstractString, version::VersionNumber)
     prefix = "## v$(version)"
