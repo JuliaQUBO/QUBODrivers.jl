@@ -722,6 +722,44 @@ function test_exact_integer_precision_and_zero_variable_models()
             caching_opt = MOIU.CachingOptimizer(MOIU.Model{Float64}(), empty_dst)
             @test MOI.is_empty(caching_opt)
         end
+
+        # 6. Machine-integer overflow protection for powers and products in polynomial evaluation
+        b32_pow = Int64(1) << 32
+        src_pow64 = MOIU.UniversalFallback(MOIU.Model{Float64}())
+        x_pow64 = MOI.add_variable(src_pow64)
+        y_pow64 = MOI.add_variable(src_pow64)
+        MOI.set(src_pow64, QUBODrivers.VariableEncodingSet(), x_pow64, [0, b32_pow, 16])
+        MOI.set(src_pow64, QUBODrivers.VariableEncodingSet(), y_pow64, [0, b32_pow])
+        MOI.set(src_pow64, MOI.ObjectiveSense(), MOI.MIN_SENSE)
+        sqf64 = MOI.ScalarQuadraticFunction(
+            [
+                MOI.ScalarQuadraticTerm(2.0, x_pow64, x_pow64),
+                MOI.ScalarQuadraticTerm(1.0, x_pow64, y_pow64),
+            ],
+            MOI.ScalarAffineTerm{Float64}[],
+            0.0,
+        )
+        MOI.set(src_pow64, MOI.ObjectiveFunction{typeof(sqf64)}(), sqf64)
+        dst_pow64 = _TestFiniteDomainSampler.Optimizer{Float64}()
+        MOI.copy_to(dst_pow64, src_pow64)
+        @test QUBOTools.value(dst_pow64, [b32_pow, 0]) == 2.0^64
+        @test QUBOTools.value(dst_pow64, [0, b32_pow]) == 0.0
+        @test QUBOTools.value(dst_pow64, [b32_pow, b32_pow]) == 2.0 * (2.0^64)
+        @test QUBOTools.value(dst_pow64, Int8[16, 0]) == 256.0
+
+        src_pow32 = MOIU.UniversalFallback(MOIU.Model{Float32}())
+        x_pow32 = MOI.add_variable(src_pow32)
+        MOI.set(src_pow32, QUBODrivers.VariableEncodingSet(), x_pow32, [0, b32_pow])
+        MOI.set(src_pow32, MOI.ObjectiveSense(), MOI.MIN_SENSE)
+        sqf32 = MOI.ScalarQuadraticFunction(
+            [MOI.ScalarQuadraticTerm(2.0f0, x_pow32, x_pow32)],
+            MOI.ScalarAffineTerm{Float32}[],
+            0.0f0,
+        )
+        MOI.set(src_pow32, MOI.ObjectiveFunction{typeof(sqf32)}(), sqf32)
+        dst_pow32 = _TestFiniteDomainSampler.Optimizer{Float32}()
+        MOI.copy_to(dst_pow32, src_pow32)
+        @test QUBOTools.value(dst_pow32, [b32_pow]) === 2.0f0^64
     end
 
     return nothing

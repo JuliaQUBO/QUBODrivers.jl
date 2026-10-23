@@ -176,12 +176,8 @@ function _convert_exact(
 end
 
 function _promote_state_for_polynomial_eval(::Type{T}, val::Real) where {T<:Real}
-    if _is_exact_in(T, val)
-        return val
-    elseif _is_exact_in(Float64, val)
+    if T <: AbstractFloat && _is_exact_in(Float64, val)
         return Float64(val)
-    elseif val isa Integer
-        return BigInt(val)
     else
         return BigFloat(val)
     end
