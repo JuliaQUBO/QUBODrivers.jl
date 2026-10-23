@@ -9,7 +9,7 @@ and make examples runnable without external services or fixed solver choices.
 | [`ExactSampler.Optimizer`](@ref) | Exhaustive enumeration for small models | returns every state |
 | [`RandomSampler.Optimizer`](@ref) | Random baseline and smoke tests | returns `num_reads` random states |
 | [`IdentitySampler.Optimizer`](@ref) | Warm-start and conversion checks | returns the provided start state |
-| [`MIPSampler.Optimizer`](@ref) | Exact MIP-backed baseline using a user-supplied MOI optimizer | returns one best incumbent |
+| [`MIPSampler.Optimizer`](@ref) | Exact MIP-backed baseline using a user-supplied MOI optimizer | returns at most one best incumbent and preserves MIP objective bounds |
 
 ## Exact Sampler
 
@@ -124,7 +124,135 @@ optimize!(model)
 
 value.(x)
 objective_value(model)
+objective_bound(model)
 ```
+
+When a time- or node-limited MIP solve stops early, `MIPSampler` preserves the
+backend's `MOI.TerminationStatus()` and `MOI.ObjectiveBound()` (translated to the
+caller's original objective sense, variable domain, scaling, constant offset, and
+fixed-variable conditioning) separately from any incumbent:
+
+- **Interrupted with an incumbent:** `result_count(model) == 1` and
+  `primal_status(model) == MOI.FEASIBLE_POINT`. `objective_value(model)` returns
+  the rounded binary state's re-evaluated QUBO objective. `objective_bound(model)`
+  and `relative_gap(model)` return the backend-reported bound and relative gap
+  when available, or throw `MOI.GetAttributeNotAllowed` if the backend did not
+  report a finite value.
+- **Interrupted without an incumbent:** `result_count(model) == 0` and
+  `primal_status(model) == MOI.NO_SOLUTION`. `MIPSampler` returns an empty
+  `SampleSet` (with zero emitted reads and the consumed solve time) rather than
+  throwing, so callers can still inspect `termination_status(model)`,
+  `solve_time(model)`, and `objective_bound(model)` (when the backend reported a
+  finite bound). Querying `objective_value(model)` or `value.(x)` throws
+  `MOI.ResultIndexBoundsError`, and querying `relative_gap(model)` throws
+  `MOI.GetAttributeNotAllowed{MOI.RelativeGap}`.
+- **Numerical or backend failures:** Unlike normal limit terminations, invalid
+  numerical backend outputs (such as `NaN` or unrepresentable bounds, inconsistent
+  `bound > incumbent`, or out-of-range binary primals) and backend solve errors
+  throw an exception from `optimize!(model)`, clear any prior results
+  (`result_count(model) == 0`, `primal_status(model) == MOI.NO_SOLUTION`), and
+  set `termination_status(model)` to `MOI.NUMERICAL_ERROR` or `MOI.OTHER_ERROR`
+  (or the backend's failure status).
+
+```julia
+using JuMP
+using QUBODrivers
+using QUBODrivers: QUBOTools
+using GLPK
+
+const MOI = JuMP.MOI
+
+function solve_interrupted_qubo(stop_reason::Integer)
+    model = Model(MIPSampler.Optimizer)
+    set_silent(model)
+    set_attribute(
+        model,
+        MIPSampler.MIPOptimizer(),
+        () -> begin
+            opt = GLPK.Optimizer()
+            GLPK._set_callback(opt, cb_data -> begin
+                if GLPK.glp_ios_reason(cb_data.tree) == stop_reason
+                    GLPK.glp_ios_terminate(cb_data.tree)
+                end
+            end)
+            return opt
+        end,
+    )
+
+    @variable(model, x[1:3], Bin)
+    @objective(
+        model,
+        Min,
+        -1.25 * (x[1] + x[2] + x[3]) + 2.0 * (x[1] * x[2] + x[2] * x[3] + x[1] * x[3]),
+    )
+
+    try
+        optimize!(model)
+    catch err
+        # Numerical validation or backend failure: prior results are cleared,
+        # and `termination_status(model)` reflects `MOI.NUMERICAL_ERROR` or `MOI.OTHER_ERROR`.
+        @warn "MIP solve failed" exception = err status = termination_status(model)
+    end
+
+    status = termination_status(model)
+    bound = try
+        objective_bound(model)
+    catch err
+        err isa MOI.GetAttributeNotAllowed ? nothing : rethrow()
+    end
+    raw_metadata = QUBOTools.metadata(QUBOTools.solution(unsafe_backend(model)))
+
+    if result_count(model) > 0
+        incumbent_val   = objective_value(model)
+        incumbent_state = round.(Int, value.(x))
+        gap = try
+            relative_gap(model)
+        catch err
+            err isa MOI.GetAttributeNotAllowed ? nothing : rethrow()
+        end
+        return (;
+            status,
+            has_incumbent = true,
+            bound,
+            incumbent_val,
+            incumbent_state,
+            gap,
+            solve_time = solve_time(model),
+            bound_metadata = raw_metadata["bound"],
+        )
+    else
+        # Primal-free limit termination (`primal_status(model) == MOI.NO_SOLUTION`) or failed solve:
+        # `objective_value(model)` and `value.(x)` throw `MOI.ResultIndexBoundsError`, and
+        # `relative_gap(model)` throws `MOI.GetAttributeNotAllowed`, while `bound` and timing remain available.
+        return (;
+            status,
+            has_incumbent = false,
+            bound,
+            incumbent_val = nothing,
+            incumbent_state = nothing,
+            gap = nothing,
+            solve_time = solve_time(model),
+            bound_metadata = get(raw_metadata, "bound", nothing),
+        )
+    end
+end
+
+# 1. Interrupted at root branching before an integer incumbent is found (bound-only result):
+bound_only = solve_interrupted_qubo(GLPK.GLP_IBRANCH)
+# bound_only.status == MOI.INTERRUPTED, bound_only.has_incumbent == false, bound_only.bound == -1.875
+
+# 2. Interrupted when the first integer incumbent is found (incumbent + bound result):
+with_incumbent = solve_interrupted_qubo(GLPK.GLP_IBINGO)
+# with_incumbent.status == MOI.INTERRUPTED, with_incumbent.has_incumbent == true,
+# with_incumbent.incumbent_val == -1.25, with_incumbent.bound == -1.25
+```
+
+!!! note "Bound Scope and Numerical Provenance"
+    Bounds and relative gaps exposed by `MIPSampler` are **backend-reported,
+    tolerance-dependent** quantities for the supplied QUBO/Ising model (possibly
+    conditioned on fixed variables), not independently verified exact-arithmetic
+    certificates. A bound on a penalized QUBO relaxation is not automatically a
+    bound on an original constrained formulation.
 
 Internally, `MIPSampler` linearizes binary products with auxiliary variables
 and the standard Fortet/McCormick inequalities. The reformulation is a baseline
