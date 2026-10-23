@@ -16,6 +16,9 @@ Common MathOptInterface-compatible tools for QUBO and Ising samplers.
 module QUBODrivers
 
 import TOML
+import DynamicPolynomials
+import MultivariatePolynomials as MP
+import MutableArithmetics as MA
 import MathOptInterface as MOI
 
 const MOIU   = MOI.Utilities
@@ -39,6 +42,10 @@ include("interface/attributes.jl")
 include("interface/test.jl")
 include("interface/benchmark.jl")
 
+include("library/polynomial/functions.jl")
+include("library/polynomial/nl_to_polynomial.jl")
+include("library/polynomial/to_polynomial.jl")
+
 include("library/sampler/wrappers/moi.jl")
 include("library/sampler/wrappers/qubotools.jl")
 
@@ -53,6 +60,8 @@ export FinalNumberOfReads, final_number_of_reads
 export PostSampleCallback, PostSampleTransform, post_sample_callback, post_sample_transform
 export total_time, effective_time, validate_metadata
 export supports_seed, honors_final_reads, enforces_time_limit
+export supports_polynomial_objective, polynomial_objective, polynomial_function, polynomial_type
+export ScalarPolynomialFunction, VectorPolynomialFunction, ToPolynomialBridge, NLToPolynomial, InvalidNLExpression
 export ExactSampler, IdentitySampler, MIPSampler, RandomSampler
 
 include("library/drivers/ExactSampler.jl")

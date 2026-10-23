@@ -11,3 +11,104 @@ function MOI.get(sampler::AbstractSampler{T}, nr::QUBOTools_MOI.NumberOfReads) w
 
     return QUBOTools.reads(ω, i)
 end
+
+function _require_quadratic_objective(sampler::AbstractSampler)
+    if _has_higher_order_polynomial_objective(sampler)
+        deg = _polynomial_objective_degree(sampler)
+        throw(
+            ArgumentError(
+                "Cannot extract a quadratic QUBO/Ising form from a degree-$deg polynomial objective; " *
+                "use `QUBODrivers.polynomial_objective(sampler)` instead.",
+            ),
+        )
+    end
+
+    return nothing
+end
+
+function QUBOTools.form(sampler::AbstractSampler, args...; kws...)
+    _require_quadratic_objective(sampler)
+    return QUBOTools.form(QUBOTools.backend(sampler), args...; kws...)
+end
+
+function QUBOTools.qubo(sampler::AbstractSampler, args...; kws...)
+    _require_quadratic_objective(sampler)
+    return QUBOTools.qubo(QUBOTools.backend(sampler), args...; kws...)
+end
+
+function QUBOTools.ising(sampler::AbstractSampler, args...; kws...)
+    _require_quadratic_objective(sampler)
+    return QUBOTools.ising(QUBOTools.backend(sampler), args...; kws...)
+end
+
+function QUBOTools.linear_form(sampler::AbstractSampler)
+    _require_quadratic_objective(sampler)
+    return QUBOTools.linear_form(QUBOTools.backend(sampler))
+end
+
+function QUBOTools.quadratic_form(sampler::AbstractSampler)
+    _require_quadratic_objective(sampler)
+    return QUBOTools.quadratic_form(QUBOTools.backend(sampler))
+end
+
+function QUBOTools.linear_terms(sampler::AbstractSampler)
+    _require_quadratic_objective(sampler)
+    return QUBOTools.linear_terms(QUBOTools.backend(sampler))
+end
+
+function QUBOTools.quadratic_terms(sampler::AbstractSampler)
+    _require_quadratic_objective(sampler)
+    return QUBOTools.quadratic_terms(QUBOTools.backend(sampler))
+end
+
+function QUBOTools.linear_size(sampler::AbstractSampler)
+    _require_quadratic_objective(sampler)
+    return QUBOTools.linear_size(QUBOTools.backend(sampler))
+end
+
+function QUBOTools.quadratic_size(sampler::AbstractSampler)
+    _require_quadratic_objective(sampler)
+    return QUBOTools.quadratic_size(QUBOTools.backend(sampler))
+end
+
+function QUBOTools.topology(sampler::AbstractSampler)
+    _require_quadratic_objective(sampler)
+    return QUBOTools.topology(QUBOTools.backend(sampler))
+end
+
+function QUBOTools.write_model(dst, sampler::AbstractSampler)
+    _require_quadratic_objective(sampler)
+    return QUBOTools.write_model(dst, QUBOTools.backend(sampler))
+end
+
+function QUBOTools.write_model(dst, sampler::AbstractSampler, fmt)
+    _require_quadratic_objective(sampler)
+    return QUBOTools.write_model(dst, QUBOTools.backend(sampler), fmt)
+end
+
+function QUBOTools.value(sampler::AbstractSampler, i::Integer)
+    return QUBOTools.value(QUBOTools.backend(sampler), i)
+end
+
+function QUBOTools.value(
+    sampler::AbstractSampler{T},
+    ψ::AbstractVector{<:Real},
+) where {T}
+    if _has_higher_order_polynomial_objective(sampler)
+        poly_obj = _get_polynomial_objective(sampler)
+        n = length(poly_obj.variables)
+        if length(ψ) != n
+            throw(
+                DimensionMismatch(
+                    "State vector length $(length(ψ)) does not match model dimension $n.",
+                ),
+            )
+        end
+        p = poly_obj.polynomial
+        vars = MP.variables(p)
+        isempty(vars) && return convert(T, _constant_coefficient(p))
+        return convert(T, p(vars => ψ))
+    end
+
+    return QUBOTools.value(QUBOTools.backend(sampler), ψ)
+end

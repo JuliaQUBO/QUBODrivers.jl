@@ -272,6 +272,20 @@ or forward the attribute.
 enforces_time_limit(::Type{<:AbstractSampler}) = false
 enforces_time_limit(sampler::AbstractSampler) = enforces_time_limit(typeof(sampler))
 
+@doc raw"""
+    supports_polynomial_objective(sampler_or_type)::Bool
+
+Return whether a sampler opts into receiving general polynomial objectives
+(including higher-order HUBO/PUBO objectives expressed via
+`MOI.ScalarNonlinearFunction` or [`ScalarPolynomialFunction`](@ref)).
+
+Defaults to `false` so quadratic QUBO/Ising samplers remain on the standard
+quadratic lowering path and reject degree >= 3 objectives as before.
+"""
+supports_polynomial_objective(::Type{<:AbstractSampler}) = false
+supports_polynomial_objective(sampler::AbstractSampler) =
+    supports_polynomial_objective(typeof(sampler))
+
 function _metadata_time(sampleset::SampleSet, key::String)
     metadata = QUBOTools.metadata(sampleset)
     time = get(metadata, "time", nothing)

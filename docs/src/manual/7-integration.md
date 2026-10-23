@@ -130,6 +130,30 @@ When adapting the example for a real sampler:
 The built-in `RandomSampler` and `ExactSampler` implementations are compact
 references for these same steps.
 
+## Polynomial Objectives (HUBO / PUBO)
+
+Samplers that natively accept higher-order polynomial objectives (such as HUBO
+or PUBO solvers) can opt into QUBODrivers' polynomial objective bridge by
+specializing [`QUBODrivers.supports_polynomial_objective`](@ref):
+
+```julia
+QUBODrivers.supports_polynomial_objective(::Type{<:Optimizer}) = true
+```
+
+When enabled, the sampler accepts `MOI.ScalarNonlinearFunction` and
+[`QUBODrivers.ScalarPolynomialFunction`](@ref) objectives in addition to linear
+and quadratic MOI objectives. Inside [`QUBODrivers.sample`](@ref), call
+[`QUBODrivers.polynomial_objective`](@ref) to retrieve a
+`MultivariatePolynomials.AbstractPolynomial{T}` over the free variables in
+`QUBOTools.variables(sampler)` order (or
+[`QUBODrivers.polynomial_function`](@ref) to retrieve the MOI
+[`QUBODrivers.ScalarPolynomialFunction`](@ref) wrapper), with fixed variables
+substituted and constant offsets preserved. Non-polynomial operators (such as
+`sin`, division `/` by zero or a non-constant expression, or non-integer/negative
+`^`) throw [`QUBODrivers.InvalidNLExpression`](@ref). Samplers that do not opt in
+keep `supports_polynomial_objective == false` and remain on the quadratic
+QUBO/Ising lowering path.
+
 ## Package a sampler interface
 
 Once the sampler module works, package it like a normal Julia interface package.
