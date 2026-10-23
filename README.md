@@ -24,8 +24,8 @@
     <a href="https://JuliaQUBO.github.io/QUBODrivers.jl/dev">
         <img src="https://img.shields.io/badge/docs-dev-blue.svg" alt="Docs">
     </a>
-    <a href="https://doi.org/10.5281/zenodo.13840948">
-        <img src="https://zenodo.org/badge/DOI/10.5281/zenodo.13840948.svg" alt="DOI">
+    <a href="https://doi.org/10.5281/zenodo.7811951">
+        <img src="https://zenodo.org/badge/DOI/10.5281/zenodo.7811951.svg" alt="QUBODrivers.jl Zenodo DOI">
     </a>
 </div>
 
@@ -106,6 +106,54 @@ If your project is using [QUBODrivers.jl](https://github.com/JuliaQUBO/QUBODrive
 ```md
 [![QUBODRIVERS](https://img.shields.io/badge/Powered%20by-QUBODrivers.jl-%20%234063d8)](https://github.com/JuliaQUBO/QUBODrivers.jl)
 ```
+
+## Citing QUBODrivers.jl
+<!-- citation-policy:start -->
+For general use of `QUBODrivers.jl` and the broader `QUBO.jl` ecosystem, cite the
+[published journal article](https://doi.org/10.1080/10556788.2026.2702926). The
+earlier [arXiv preprint](https://arxiv.org/abs/2307.02577) remains available,
+but the journal article is the version of record.
+
+For a direct software citation, use the
+[Zenodo concept DOI](https://doi.org/10.5281/zenodo.7811951). The concept DOI
+is the evergreen identifier for `QUBODrivers.jl`, resolves to the latest archived
+release, and is the DOI recorded in `CITATION.cff`. When reproducibility
+requires an exact release, cite the matching Zenodo version DOI instead; the
+archive for `v0.6.6` is
+[10.5281/zenodo.23420133](https://doi.org/10.5281/zenodo.23420133).
+
+The BibTeX entries below cite the ecosystem article and the `v0.6.6` software
+archive. Replace the `@software` entry's `doi` and `url` with the concept DOI
+when an evergreen software citation is preferred:
+
+```bibtex
+@article{xavier2026qubojl,
+  author       = {Maciel Xavier, Pedro and Ripper, Pedro and Andrade, Tiago and Dias Garcia, Joaquim and Maculan, Nelson and Bernal Neira, David E.},
+  title        = {{QUBO.jl: a Julia ecosystem for quadratic unconstrained binary optimization}},
+  journal      = {Optimization Methods and Software},
+  year         = {2026},
+  pages        = {1--24},
+  doi          = {10.1080/10556788.2026.2702926},
+  url          = {https://doi.org/10.1080/10556788.2026.2702926}
+}
+
+@software{qubodrivers:2026,
+  author       = {Maciel Xavier, Pedro and Ripper, Pedro and Andrade, Tiago and Dias Garcia, Joaquim and Bernal Neira, David E.},
+  title        = {{QUBODrivers.jl}},
+  year         = {2026},
+  publisher    = {Zenodo},
+  version      = {v0.6.6},
+  doi          = {10.5281/zenodo.23420133},
+  url          = {https://doi.org/10.5281/zenodo.23420133},
+  note         = {Evergreen concept DOI: 10.5281/zenodo.7811951}
+}
+```
+
+Machine-readable metadata is in
+[`CITATION.cff`](https://github.com/JuliaQUBO/QUBODrivers.jl/blob/main/CITATION.cff),
+with BibTeX in
+[`CITATION.bib`](https://github.com/JuliaQUBO/QUBODrivers.jl/blob/main/CITATION.bib).
+<!-- citation-policy:end -->
 
 ---
 
