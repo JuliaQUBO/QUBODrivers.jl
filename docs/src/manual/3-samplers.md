@@ -9,7 +9,7 @@ and make examples runnable without external services or fixed solver choices.
 | [`ExactSampler.Optimizer`](@ref) | Exhaustive enumeration for small models | returns every state |
 | [`RandomSampler.Optimizer`](@ref) | Random baseline and smoke tests | returns `num_reads` random states |
 | [`IdentitySampler.Optimizer`](@ref) | Warm-start and conversion checks | returns the provided start state |
-| [`MIPSampler.Optimizer`](@ref) | Exact MIP-backed baseline using a user-supplied MOI optimizer | returns one best incumbent |
+| [`MIPSampler.Optimizer`](@ref) | Exact MIP-backed baseline using a user-supplied MOI optimizer | returns at most one best incumbent and preserves MIP objective bounds |
 
 ## Exact Sampler
 
@@ -124,7 +124,46 @@ optimize!(model)
 
 value.(x)
 objective_value(model)
+objective_bound(model)
 ```
+
+When a time- or node-limited MIP solve stops early, `MIPSampler` preserves the
+backend's `MOI.TerminationStatus()` and `MOI.ObjectiveBound()` (translated to the
+caller's original objective sense, variable domain, scaling, constant offset, and
+fixed-variable conditioning) separately from any incumbent:
+
+- **Interrupted with an incumbent:** `result_count(model) == 1` and
+  `primal_status(model) == MOI.FEASIBLE_POINT`. Both `objective_value(model)` (the
+  rounded binary state's re-evaluated QUBO objective) and `objective_bound(model)`
+  (the backend-reported bound) are available, along with `relative_gap(model)` if
+  the backend reports `MOI.RelativeGap()`.
+- **Interrupted without an incumbent:** `result_count(model) == 0` and
+  `primal_status(model) == MOI.NO_SOLUTION`. `MIPSampler` returns an empty
+  `SampleSet` (with zero emitted reads and the consumed solve time) rather than
+  throwing, so callers can still inspect `termination_status(model)` and
+  `objective_bound(model)`:
+
+```julia
+MOI = QUBODrivers.MOI
+
+status = MOI.get(model, MOI.TerminationStatus())
+bound  = MOI.get(model, MOI.ObjectiveBound())
+
+if MOI.get(model, MOI.ResultCount()) > 0
+    incumbent_val   = MOI.get(model, MOI.ObjectiveValue(1))
+    incumbent_state = round.(Int, MOI.get.(model, MOI.VariablePrimal(1), x))
+else
+    # Primal-free limit termination (MOI.PrimalStatus() == MOI.NO_SOLUTION):
+    # no incumbent or finite relative gap, but `bound` and timing remain available.
+end
+```
+
+!!! note "Bound Scope and Numerical Provenance"
+    Bounds and relative gaps exposed by `MIPSampler` are **backend-reported,
+    tolerance-dependent** quantities for the supplied QUBO/Ising model (possibly
+    conditioned on fixed variables), not independently verified exact-arithmetic
+    certificates. A bound on a penalized QUBO relaxation is not automatically a
+    bound on an original constrained formulation.
 
 Internally, `MIPSampler` linearizes binary products with auxiliary variables
 and the standard Fortet/McCormick inequalities. The reformulation is a baseline
