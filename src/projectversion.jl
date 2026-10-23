@@ -1,3 +1,5 @@
+include_dependency(abspath(dirname(@__DIR__), "Project.toml"))
+
 const __PROJECT__ = Ref{Union{String,Nothing}}(nothing)
 
 function __project__()
