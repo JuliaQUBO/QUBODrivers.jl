@@ -334,6 +334,11 @@ function _test_random_sampler_auto_configure()
         @test meta_ovr["auto_configure"]["parameters"]["num_reads"]["user_override"] === true
         @test meta_ovr["reads"]["number_of_reads"] == 7
         @test _random_total_reads(model_ovr) == 7
+
+        # 4. Large-n overflow safety in auto_num_reads:
+        @test RandomSampler.auto_num_reads(0) == 1
+        @test RandomSampler.auto_num_reads(1_500) == 10_000
+        @test RandomSampler.auto_num_reads(1_000_000) == 10_000
     end
 
     return nothing

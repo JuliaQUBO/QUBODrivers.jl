@@ -43,8 +43,12 @@ const _AUTO_CONFIGURE_MAX_READS = 10_000
 
 function auto_num_reads(n::Integer)::Int
     n <= 0 && return 1
-    scaled = ceil(Int, 10.0^(0.5 * sqrt(Float64(n))))
-    return clamp(scaled, _AUTO_CONFIGURE_MIN_READS, _AUTO_CONFIGURE_MAX_READS)
+    scaled = clamp(
+        ceil(10.0^(0.5 * sqrt(Float64(n)))),
+        Float64(_AUTO_CONFIGURE_MIN_READS),
+        Float64(_AUTO_CONFIGURE_MAX_READS),
+    )
+    return Int(scaled)
 end
 
 sample_state(rng::AbstractRNG, n::Integer) = rand(rng, (0, 1), n)
@@ -62,8 +66,9 @@ function QUBODrivers.sample(sampler::Optimizer{T}) where {T}
     seed                 = MOI.get(sampler, QUBODrivers.RandomSeed())
     rng                  = MOI.get(sampler, RandomGenerator())
 
-    scaled_reads = auto_num_reads(n)
+    scaled_reads = 0
     if auto_cfg
+        scaled_reads = auto_num_reads(n)
         if !explicit_num_reads
             num_reads = scaled_reads
         end

@@ -161,6 +161,11 @@ function validate_metadata(metadata::AbstractDict)
             elseif !haskey(auto_cfg, "enabled")
                 push!(violations, "metadata[\"auto_configure\"] must contain key \"enabled\"")
             end
+            if haskey(auto_cfg, "supported") && !(auto_cfg["supported"] isa Bool)
+                push!(violations, "metadata[\"auto_configure\"][\"supported\"] must be a boolean")
+            elseif !haskey(auto_cfg, "supported")
+                push!(violations, "metadata[\"auto_configure\"] must contain key \"supported\"")
+            end
             _require_nonnegative_integer_metadata!(
                 violations,
                 auto_cfg,
@@ -366,7 +371,15 @@ function _record_auto_configure_metadata!(
     metadata::Dict{String,Any},
 )
     auto_configure(sampler) || return nothing
-    haskey(metadata, "auto_configure") && return nothing
+
+    if haskey(metadata, "auto_configure") && metadata["auto_configure"] isa AbstractDict
+        auto_cfg = metadata["auto_configure"]
+        get!(auto_cfg, "enabled", true)
+        get!(auto_cfg, "supported", supports_auto_configure(sampler))
+        get!(auto_cfg, "num_variables", QUBOTools.dimension(sampler))
+        get!(auto_cfg, "parameters", Dict{String,Any}())
+        return nothing
+    end
 
     metadata["auto_configure"] = Dict{String,Any}(
         "enabled"       => true,
