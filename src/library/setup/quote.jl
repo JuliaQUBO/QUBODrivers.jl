@@ -337,6 +337,38 @@ function __setup_quote_qubodrivers_attrs(spec::_SamplerSpec)
             ::Union{QUBODrivers.FinalNumberOfReads,QUBODrivers._RawFinalNumberOfReads},
         ) = true
 
+        # QUBODrivers.AutoConfigure - get
+        function MOI.get(sampler::$(Optimizer), ::QUBODrivers.AutoConfigure)
+            return QUBODrivers.auto_configure(sampler)
+        end
+
+        QUBODrivers.default_raw_attr(
+            ::$(Optimizer),
+            ::QUBODrivers._RawAutoConfigure,
+        ) = false
+
+        # QUBODrivers.AutoConfigure - set
+        function MOI.set(sampler::$(Optimizer), ::QUBODrivers.AutoConfigure, value)
+            return MOI.set(sampler, QUBODrivers._RawAutoConfigure(), value)
+        end
+
+        function MOI.set(
+            sampler::$(Optimizer),
+            attr::QUBODrivers._RawAutoConfigure,
+            value,
+        )
+            QUBODrivers._validate_auto_configure(value)
+            QUBODrivers.set_raw_attr!(sampler, attr, value)
+
+            return nothing
+        end
+
+        # QUBODrivers.AutoConfigure - support
+        MOI.supports(
+            ::$(Optimizer),
+            ::Union{QUBODrivers.AutoConfigure,QUBODrivers._RawAutoConfigure},
+        ) = true
+
         # QUBODrivers.PostSampleCallback - get
         function MOI.get(sampler::$(Optimizer), ::QUBODrivers.PostSampleCallback)
             return QUBODrivers.post_sample_callback(sampler)

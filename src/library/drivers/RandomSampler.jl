@@ -36,6 +36,16 @@ QUBODrivers.@setup Optimizer begin
 end
 
 QUBODrivers.honors_final_reads(::Type{<:Optimizer}) = true
+QUBODrivers.supports_auto_configure(::Type{<:Optimizer}) = true
+
+const _AUTO_CONFIGURE_MIN_READS = 10
+const _AUTO_CONFIGURE_MAX_READS = 10_000
+
+function auto_num_reads(n::Integer)::Int
+    n <= 0 && return 1
+    scaled = ceil(Int, 10.0^(0.5 * sqrt(Float64(n))))
+    return clamp(scaled, _AUTO_CONFIGURE_MIN_READS, _AUTO_CONFIGURE_MAX_READS)
+end
 
 sample_state(rng::AbstractRNG, n::Integer) = rand(rng, (0, 1), n)
 
@@ -44,10 +54,23 @@ function QUBODrivers.sample(sampler::Optimizer{T}) where {T}
     n, L, Q, α, β = QUBOTools.qubo(sampler, :dict; sense = :min)
 
     # Retrieve Attributes
-    num_reads       = MOI.get(sampler, NumberOfReads())
-    final_num_reads = MOI.get(sampler, QUBODrivers.FinalNumberOfReads())
-    seed            = MOI.get(sampler, QUBODrivers.RandomSeed())
-    rng             = MOI.get(sampler, RandomGenerator())
+    auto_cfg             = MOI.get(sampler, QUBODrivers.AutoConfigure())
+    explicit_num_reads   = QUBODrivers.has_explicit_raw_attr(sampler, :num_reads)
+    explicit_final_reads = QUBODrivers.has_explicit_raw_attr(sampler, :final_num_reads)
+    num_reads            = MOI.get(sampler, NumberOfReads())
+    final_num_reads      = MOI.get(sampler, QUBODrivers.FinalNumberOfReads())
+    seed                 = MOI.get(sampler, QUBODrivers.RandomSeed())
+    rng                  = MOI.get(sampler, RandomGenerator())
+
+    scaled_reads = auto_num_reads(n)
+    if auto_cfg
+        if !explicit_num_reads
+            num_reads = scaled_reads
+        end
+        if !explicit_final_reads
+            final_num_reads = num_reads
+        end
+    end
 
     # Validate Input
     @assert num_reads >= 0
@@ -79,6 +102,26 @@ function QUBODrivers.sample(sampler::Optimizer{T}) where {T}
         termination_status    = MOI.LOCALLY_SOLVED,
     )
     metadata["time"] = Dict{String,Any}("effective" => results.time)
+    if auto_cfg
+        metadata["auto_configure"] = Dict{String,Any}(
+            "enabled"       => true,
+            "supported"     => true,
+            "num_variables" => n,
+            "parameters"    => Dict{String,Any}(
+                "num_reads" => Dict{String,Any}(
+                    "scaled_value"    => scaled_reads,
+                    "effective_value" => num_reads,
+                    "user_override"   => explicit_num_reads,
+                    "bounds"          => [_AUTO_CONFIGURE_MIN_READS, _AUTO_CONFIGURE_MAX_READS],
+                    "formula"         => "clamp(ceil(Int, 10^(0.5 * sqrt(n))), 10, 10000)",
+                ),
+                "final_num_reads" => Dict{String,Any}(
+                    "effective_value" => final_num_reads,
+                    "user_override"   => explicit_final_reads,
+                ),
+            ),
+        )
+    end
 
     return SampleSet{T}(samples, metadata; sense = :min, domain = :bool)
 end

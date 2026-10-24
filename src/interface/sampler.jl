@@ -153,6 +153,36 @@ function validate_metadata(metadata::AbstractDict)
         )
     end
 
+    if haskey(metadata, "auto_configure")
+        auto_cfg = _require_dict_metadata!(violations, metadata, "metadata", "auto_configure")
+        if !isnothing(auto_cfg)
+            if haskey(auto_cfg, "enabled") && !(auto_cfg["enabled"] isa Bool)
+                push!(violations, "metadata[\"auto_configure\"][\"enabled\"] must be a boolean")
+            elseif !haskey(auto_cfg, "enabled")
+                push!(violations, "metadata[\"auto_configure\"] must contain key \"enabled\"")
+            end
+            _require_nonnegative_integer_metadata!(
+                violations,
+                auto_cfg,
+                "metadata[\"auto_configure\"]",
+                "num_variables",
+            )
+            params = _require_dict_metadata!(
+                violations,
+                auto_cfg,
+                "metadata[\"auto_configure\"]",
+                "parameters",
+            )
+            if !isnothing(params)
+                _require_string_keys_metadata!(
+                    violations,
+                    params,
+                    "metadata[\"auto_configure\"][\"parameters\"]",
+                )
+            end
+        end
+    end
+
     return violations
 end
 
@@ -289,6 +319,7 @@ function _sample!(sampler::AbstractSampler{T}, sampleset::SampleSet{T}, total_ti
     end
 
     _record_random_seed_metadata!(sampler, metadata)
+    _record_auto_configure_metadata!(sampler, metadata)
     _warn_metadata_violations(sampleset)
 
     if _has_nonbinary_or_heterogeneous_domains(sampler) &&
@@ -326,6 +357,23 @@ function _record_random_seed_metadata!(
 
     metadata_seeds["sampler"] = seed
     metadata["seeds"] = metadata_seeds
+
+    return nothing
+end
+
+function _record_auto_configure_metadata!(
+    sampler::AbstractSampler,
+    metadata::Dict{String,Any},
+)
+    auto_configure(sampler) || return nothing
+    haskey(metadata, "auto_configure") && return nothing
+
+    metadata["auto_configure"] = Dict{String,Any}(
+        "enabled"       => true,
+        "supported"     => supports_auto_configure(sampler),
+        "num_variables" => QUBOTools.dimension(sampler),
+        "parameters"    => Dict{String,Any}(),
+    )
 
     return nothing
 end

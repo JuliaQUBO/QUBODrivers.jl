@@ -174,6 +174,41 @@ function _test_benchmark_termination_status(config!::Function, sampler::Type{S})
     return nothing
 end
 
+function _test_benchmark_auto_configure(config!::Function, sampler::Type{S}) where {S}
+    Test.@testset "AutoConfigure Acceptance" begin
+        model_off = _benchmark_conformance_model(config!, sampler)
+        if MOI.supports(model_off, QUBODrivers.AutoConfigure())
+            Test.@test MOI.get(model_off, QUBODrivers.AutoConfigure()) === false
+            MOI.optimize!(model_off)
+            sampleset_off = _benchmark_conformance_solution(model_off)
+            Test.@test !haskey(QUBOTools.metadata(sampleset_off), "auto_configure")
+
+            model_on = _benchmark_conformance_model(
+                config!,
+                sampler;
+                final_number_of_reads = nothing,
+            )
+            Test.@test MOI.set(model_on, QUBODrivers.AutoConfigure(), true) === nothing
+            Test.@test MOI.get(model_on, QUBODrivers.AutoConfigure()) === true
+            MOI.optimize!(model_on)
+            sampleset_on = _benchmark_conformance_solution(model_on)
+            metadata_on = QUBOTools.metadata(sampleset_on)
+            Test.@test haskey(metadata_on, "auto_configure")
+            auto_meta = metadata_on["auto_configure"]
+            Test.@test auto_meta isa AbstractDict
+            Test.@test auto_meta["enabled"] === true
+            Test.@test auto_meta["supported"] === QUBODrivers.supports_auto_configure(S)
+            Test.@test auto_meta["num_variables"] == 3
+            Test.@test auto_meta["parameters"] isa AbstractDict
+            Test.@test isempty(QUBODrivers.validate_metadata(sampleset_on))
+        else
+            Test.@test !QUBODrivers.supports_auto_configure(S)
+        end
+    end
+
+    return nothing
+end
+
 function _test_benchmark_conformance(
     config!::Function,
     sampler::Type{S};
@@ -187,6 +222,7 @@ function _test_benchmark_conformance(
     Test.@testset "→ Benchmark Conformance" begin
         if metadata_conformance
             _test_benchmark_metadata_conformance(config!, sampler)
+            _test_benchmark_auto_configure(config!, sampler)
         end
 
         if timing_sanity

@@ -75,6 +75,10 @@ QUBODrivers exposes conservative trait functions for benchmark harnesses:
   `QUBODrivers.FinalNumberOfReads()` controls the final emitted read count.
 - `QUBODrivers.enforces_time_limit(sampler)` reports whether
   `MOI.TimeLimitSec()` is enforced by the sampler contract.
+- `QUBODrivers.supports_auto_configure(sampler)` reports whether
+  `QUBODrivers.AutoConfigure()` scales solver parameters automatically from
+  problem size `n` (preserving explicit user attribute overrides and logging
+  chosen values in `metadata["auto_configure"]`).
 
 The default for each trait is `false`. Drivers should define a method returning
 `true` only when the behavior is part of their public contract. Forwarding a
@@ -160,4 +164,8 @@ QUBODrivers.validate_metadata
 QUBODrivers.supports_seed
 QUBODrivers.honors_final_reads
 QUBODrivers.enforces_time_limit
+QUBODrivers.AutoConfigure
+QUBODrivers.auto_configure
+QUBODrivers.supports_auto_configure
+QUBODrivers.has_explicit_raw_attr
 ```
