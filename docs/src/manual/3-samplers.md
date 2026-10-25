@@ -312,3 +312,12 @@ algorithms and released ToQUBO 0.7.1 integration. See also
 [Public composition pattern](@ref), [Composite accounting](@ref), and
 [Composite conformance evidence](@ref). QUBODrivers does not depend on this
 external package.
+
+### Optional External Sampler Designs
+
+Before a new provider or hardware-SDK sampler package has a standalone
+repository, its public driver contract, model/sample mapping, and local
+conformance test plan are tracked as bounded design notes:
+
+- [Optional CUDA-Q QAOA Sampler Design](@ref) (`CUDAQOpt.jl` design contract,
+  tracked under [`JuliaQUBO/QUBODrivers.jl#88`](https://github.com/JuliaQUBO/QUBODrivers.jl/issues/88)).

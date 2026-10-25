@@ -27,6 +27,7 @@ makedocs(;
             "Test Suite"    => "manual/5-tests.md",
             "Benchmarking"  => "manual/6-benchmarks.md",
             "Metadata Schema" => "manual/metadata.md",
+            "CUDA-Q Sampler Design" => "manual/cudaq-design.md",
             "API Reference" => "manual/8-api.md",
         ],
         "Booklet" => [
