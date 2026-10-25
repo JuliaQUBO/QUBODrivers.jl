@@ -119,10 +119,10 @@ For a direct software citation, use the
 is the evergreen identifier for `QUBODrivers.jl`, resolves to the latest archived
 release, and is the DOI recorded in `CITATION.cff`. When reproducibility
 requires an exact release, cite the matching Zenodo version DOI instead; the
-archive for `v0.6.7` is
-[10.5281/zenodo.23599534](https://doi.org/10.5281/zenodo.23599534).
+archive for `v0.6.8` is
+[10.5281/zenodo.23648751](https://doi.org/10.5281/zenodo.23648751).
 
-The BibTeX entries below cite the ecosystem article and the `v0.6.7` software
+The BibTeX entries below cite the ecosystem article and the `v0.6.8` software
 archive. Replace the `@software` entry's `doi` and `url` with the concept DOI
 when an evergreen software citation is preferred:
 
@@ -142,9 +142,9 @@ when an evergreen software citation is preferred:
   title        = {{QUBODrivers.jl}},
   year         = {2026},
   publisher    = {Zenodo},
-  version      = {v0.6.7},
-  doi          = {10.5281/zenodo.23599534},
-  url          = {https://doi.org/10.5281/zenodo.23599534},
+  version      = {v0.6.8},
+  doi          = {10.5281/zenodo.23648751},
+  url          = {https://doi.org/10.5281/zenodo.23648751},
   note         = {Evergreen concept DOI: 10.5281/zenodo.7811951}
 }
 ```

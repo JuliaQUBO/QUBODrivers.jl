@@ -31,8 +31,8 @@ date-released: 2026-10-25
 doi: "10.5281/zenodo.7811951"
 identifiers:
   - type: doi
-    value: "10.5281/zenodo.23599534"
-    description: "Zenodo DOI for version 0.6.7"
+    value: "10.5281/zenodo.23648751"
+    description: "Zenodo DOI for version 0.6.8"
 keywords:
   - Julia
   - mathematical optimization
