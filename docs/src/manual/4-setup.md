@@ -100,6 +100,16 @@ end
 When a seed is configured, QUBODrivers records it under
 `metadata["seeds"]["sampler"]` after sampling.
 
+Every generated optimizer also supports `QUBODrivers.AutoConfigure()` and the
+raw key `"auto_configure"` (defaulting to `false`). Samplers that opt into
+problem-size parameter scaling implement
+`QUBODrivers.supports_auto_configure(::Type{<:Optimizer}) = true` and check
+[`QUBODrivers.has_explicit_raw_attr`](@ref) inside `QUBODrivers.sample(sampler)`
+so any explicitly set raw attribute (`"num_reads"`, `"num_sweeps"`, etc.) always
+takes precedence over auto-scaled values, recording the resolved problem-size
+scaling provenance under `metadata["auto_configure"]` while preserving
+user-configured raw attributes across solves.
+
 Generated optimizers also support a generic post-sampling hook through
 `QUBODrivers.PostSampleCallback()` and the raw key
 `"post_sample_callback"`. The callback is called after

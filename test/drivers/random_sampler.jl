@@ -269,12 +269,88 @@ function _test_random_sampler_post_sample_error()
     return nothing
 end
 
+function _test_random_sampler_auto_configure()
+    @testset "AutoConfigure scaling and override precedence" begin
+        sampler = RandomSampler.Optimizer()
+        @test QUBODrivers.supports_auto_configure(sampler)
+        @test QUBODrivers.supports_auto_configure(RandomSampler.Optimizer)
+        @test !QUBODrivers.supports_auto_configure(ExactSampler.Optimizer)
+        @test MOI.supports(sampler, QUBODrivers.AutoConfigure())
+        @test MOI.supports(sampler, MOI.RawOptimizerAttribute("auto_configure"))
+        @test MOI.get(sampler, QUBODrivers.AutoConfigure()) === false
+        @test_throws ErrorException MOI.set(sampler, QUBODrivers.AutoConfigure(), 1)
+
+        # 1. Default off: uses default 1_000 reads, no auto_configure metadata
+        model_off = MOI.instantiate(RandomSampler.Optimizer; with_bridge_type = Float64)
+        x_off, _ = MOI.add_constrained_variables(model_off, fill(MOI.ZeroOne(), 4))
+        MOI.set(model_off, QUBODrivers.RandomSeed(), 7)
+        MOI.set(model_off, MOI.ObjectiveSense(), MOI.MIN_SENSE)
+        f_off = MOI.ScalarAffineFunction(MOI.ScalarAffineTerm.(1.0, x_off), 0.0)
+        MOI.set(model_off, MOI.ObjectiveFunction{typeof(f_off)}(), f_off)
+        MOI.optimize!(model_off)
+        sol_off = _random_solution(model_off)
+        @test !haskey(QUBOTools.metadata(sol_off), "auto_configure")
+        @test QUBOTools.metadata(sol_off)["reads"]["number_of_reads"] == 1_000
+
+        # 2. AutoConfigure = true with n = 4 and no explicit num_reads override:
+        #    ceil(Int, 10^(0.5 * sqrt(4))) = ceil(Int, 10^1) = 10 reads
+        model_on = MOI.instantiate(RandomSampler.Optimizer; with_bridge_type = Float64)
+        x_on, _ = MOI.add_constrained_variables(model_on, fill(MOI.ZeroOne(), 4))
+        MOI.set(model_on, QUBODrivers.AutoConfigure(), true)
+        MOI.set(model_on, QUBODrivers.RandomSeed(), 7)
+        MOI.set(model_on, MOI.ObjectiveSense(), MOI.MIN_SENSE)
+        f_on = MOI.ScalarAffineFunction(MOI.ScalarAffineTerm.(1.0, x_on), 0.0)
+        MOI.set(model_on, MOI.ObjectiveFunction{typeof(f_on)}(), f_on)
+        MOI.optimize!(model_on)
+        sol_on = _random_solution(model_on)
+        meta_on = QUBOTools.metadata(sol_on)
+        @test haskey(meta_on, "auto_configure")
+        @test meta_on["auto_configure"]["enabled"] === true
+        @test meta_on["auto_configure"]["supported"] === true
+        @test meta_on["auto_configure"]["num_variables"] == 4
+        @test meta_on["auto_configure"]["parameters"]["num_reads"]["scaled_value"] == 10
+        @test meta_on["auto_configure"]["parameters"]["num_reads"]["effective_value"] == 10
+        @test meta_on["auto_configure"]["parameters"]["num_reads"]["user_override"] === false
+        @test meta_on["reads"]["number_of_reads"] == 10
+        @test meta_on["reads"]["final_number_of_reads"] == 10
+        @test _random_total_reads(model_on) == 10
+        @test isempty(QUBODrivers.validate_metadata(sol_on))
+
+        # 3. User override precedence when AutoConfigure = true and num_reads is explicitly set:
+        model_ovr = MOI.instantiate(RandomSampler.Optimizer; with_bridge_type = Float64)
+        x_ovr, _ = MOI.add_constrained_variables(model_ovr, fill(MOI.ZeroOne(), 9))
+        MOI.set(model_ovr, QUBODrivers.AutoConfigure(), true)
+        MOI.set(model_ovr, MOI.RawOptimizerAttribute("num_reads"), 7)
+        MOI.set(model_ovr, QUBODrivers.RandomSeed(), 7)
+        MOI.set(model_ovr, MOI.ObjectiveSense(), MOI.MIN_SENSE)
+        f_ovr = MOI.ScalarAffineFunction(MOI.ScalarAffineTerm.(1.0, x_ovr), 0.0)
+        MOI.set(model_ovr, MOI.ObjectiveFunction{typeof(f_ovr)}(), f_ovr)
+        MOI.optimize!(model_ovr)
+        sol_ovr = _random_solution(model_ovr)
+        meta_ovr = QUBOTools.metadata(sol_ovr)
+        # For n = 9, scaled_value = ceil(Int, 10^(1.5)) = 32, but user override keeps 7:
+        @test meta_ovr["auto_configure"]["parameters"]["num_reads"]["scaled_value"] == 32
+        @test meta_ovr["auto_configure"]["parameters"]["num_reads"]["effective_value"] == 7
+        @test meta_ovr["auto_configure"]["parameters"]["num_reads"]["user_override"] === true
+        @test meta_ovr["reads"]["number_of_reads"] == 7
+        @test _random_total_reads(model_ovr) == 7
+
+        # 4. Large-n overflow safety in auto_num_reads:
+        @test RandomSampler.auto_num_reads(0) == 1
+        @test RandomSampler.auto_num_reads(1_500) == 10_000
+        @test RandomSampler.auto_num_reads(1_000_000) == 10_000
+    end
+
+    return nothing
+end
+
 function test_random_sampler()
     QUBODrivers.test(RandomSampler.Optimizer)
 
     @testset "□ RandomSampler" verbose = true begin
         _test_random_sampler_final_number_of_reads_attribute()
         _test_random_sampler_final_number_of_reads_sampling()
+        _test_random_sampler_auto_configure()
         _test_random_sampler_post_sample_annotation()
         _test_random_sampler_post_sample_transform()
         _test_random_sampler_post_sample_transform_gate()

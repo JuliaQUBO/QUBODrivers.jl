@@ -28,12 +28,14 @@ RawSamplerAttribute(key::String) = RawSamplerAttribute{Symbol(key)}()
 const _NUMBER_OF_READS_RAW       = "num_reads"
 const _RANDOM_SEED_RAW           = "seed"
 const _FINAL_NUMBER_OF_READS_RAW = "final_num_reads"
+const _AUTO_CONFIGURE_RAW        = "auto_configure"
 const _POST_SAMPLE_CALLBACK_RAW  = "post_sample_callback"
 const _POST_SAMPLE_TRANSFORM_RAW = "post_sample_transform"
 
 const _RawNumberOfReads       = RawSamplerAttribute{Symbol(_NUMBER_OF_READS_RAW)}
 const _RawRandomSeed          = RawSamplerAttribute{Symbol(_RANDOM_SEED_RAW)}
 const _RawFinalNumberOfReads  = RawSamplerAttribute{Symbol(_FINAL_NUMBER_OF_READS_RAW)}
+const _RawAutoConfigure       = RawSamplerAttribute{Symbol(_AUTO_CONFIGURE_RAW)}
 const _RawPostSampleCallback  = RawSamplerAttribute{Symbol(_POST_SAMPLE_CALLBACK_RAW)}
 const _RawPostSampleTransform = RawSamplerAttribute{Symbol(_POST_SAMPLE_TRANSFORM_RAW)}
 
@@ -66,6 +68,22 @@ Generated optimizers created by [`QUBODrivers.@setup`](@ref) support this
 attribute and the raw `"final_num_reads"` key.
 """
 struct FinalNumberOfReads <: SamplerAttribute end
+
+@doc raw"""
+    AutoConfigure()
+
+Generic opt-in sampler optimizer attribute enabling problem-size-dependent
+parameter scaling (`n = QUBOTools.dimension(sampler)`).
+
+The raw optimizer attribute key is `"auto_configure"`, and the default value is
+`false` so existing solver behavior is unchanged unless explicitly enabled.
+Samplers that implement size-based scaling advertise support via
+[`supports_auto_configure`](@ref), respect any explicitly user-set solver
+attributes over auto-scaled values (verifiable via [`has_explicit_raw_attr`](@ref)),
+clamp scaled parameters to explicit finite bounds, and log the chosen scaling
+details under `metadata["auto_configure"]`.
+"""
+struct AutoConfigure <: SamplerAttribute end
 
 @doc raw"""
     PostSampleCallback()
@@ -209,6 +227,44 @@ function final_number_of_reads(sampler::AbstractSampler)
 end
 
 @doc raw"""
+    auto_configure(sampler)::Bool
+
+Return whether automatic problem-size parameter scaling ([`AutoConfigure`](@ref))
+is enabled on `sampler`. Samplers that do not support the attribute default to
+`false`.
+"""
+function auto_configure(sampler::AbstractSampler)::Bool
+    attr = _RawAutoConfigure()
+
+    enabled = try
+        MOI.get(sampler, attr)
+    catch err
+        _is_unavailable_raw_attr(err, attr) ? false : rethrow()
+    end
+
+    return enabled::Bool
+end
+
+@doc raw"""
+    has_explicit_raw_attr(sampler, key::Union{Symbol,AbstractString})::Bool
+
+Return `true` when the raw optimizer attribute `key` has been explicitly set by
+the caller on `sampler` (with a non-`nothing` value), and `false` when the
+attribute is still at its default value. Drivers implementing
+[`AutoConfigure`](@ref) use this check to preserve user override precedence.
+"""
+function has_explicit_raw_attr(
+    sampler::AbstractSampler,
+    key::Union{Symbol,AbstractString},
+)::Bool
+    hasfield(typeof(sampler), :attributes) || return false
+    attrs = getfield(sampler, :attributes)
+    attrs isa AbstractDict || return false
+    sym = Symbol(key)
+    return haskey(attrs, sym) && !isnothing(attrs[sym])
+end
+
+@doc raw"""
     post_sample_callback(sampler)
 
 Return the configured post-sample callback for `sampler`, or `nothing` when no
@@ -289,6 +345,15 @@ or forward the attribute.
 """
 enforces_time_limit(::Type{<:AbstractSampler}) = false
 enforces_time_limit(sampler::AbstractSampler) = enforces_time_limit(typeof(sampler))
+
+@doc raw"""
+    supports_auto_configure(sampler_or_type)::Bool
+
+Return whether a sampler implements automatic problem-size parameter scaling
+when [`AutoConfigure`](@ref) is set to `true`. Defaults to `false`.
+"""
+supports_auto_configure(::Type{<:AbstractSampler}) = false
+supports_auto_configure(sampler::AbstractSampler) = supports_auto_configure(typeof(sampler))
 
 @doc raw"""
     supports_polynomial_objective(sampler_or_type)::Bool
@@ -429,10 +494,18 @@ function _validate_post_sample_transform(value)
     return nothing
 end
 
+function _validate_auto_configure(value)
+    value isa Bool || error("Value for 'AutoConfigure' must be a boolean")
+
+    return nothing
+end
+
 MOIU.map_indices(_, ::RandomSeed, value) = value
 MOIU.map_indices(_, ::_RawRandomSeed, value) = value
 MOIU.map_indices(_, ::FinalNumberOfReads, value) = value
 MOIU.map_indices(_, ::_RawFinalNumberOfReads, value) = value
+MOIU.map_indices(_, ::AutoConfigure, value) = value
+MOIU.map_indices(_, ::_RawAutoConfigure, value) = value
 MOIU.map_indices(_, ::PostSampleCallback, value) = value
 MOIU.map_indices(_, ::_RawPostSampleCallback, value) = value
 MOIU.map_indices(_, ::PostSampleTransform, value) = value

@@ -27,6 +27,10 @@ QUBODrivers.RandomSeed
 QUBODrivers.random_seed
 QUBODrivers.FinalNumberOfReads
 QUBODrivers.final_number_of_reads
+QUBODrivers.AutoConfigure
+QUBODrivers.auto_configure
+QUBODrivers.supports_auto_configure
+QUBODrivers.has_explicit_raw_attr
 QUBODrivers.PostSampleCallback
 QUBODrivers.PostSampleTransform
 QUBODrivers.post_sample_callback
