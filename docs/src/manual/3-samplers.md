@@ -321,3 +321,5 @@ conformance test plan are tracked as bounded design notes:
 
 - [Optional CUDA-Q QAOA Sampler Design](@ref) (`CUDAQOpt.jl` design contract,
   tracked under [`JuliaQUBO/QUBODrivers.jl#88`](https://github.com/JuliaQUBO/QUBODrivers.jl/issues/88)).
+- [Optional TKET / Quantinuum Nexus Sampler Design](@ref) (`TKETOpt.jl` design
+  contract, tracked under [`JuliaQUBO/QUBODrivers.jl#89`](https://github.com/JuliaQUBO/QUBODrivers.jl/issues/89)).

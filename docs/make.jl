@@ -28,6 +28,7 @@ makedocs(;
             "Benchmarking"  => "manual/6-benchmarks.md",
             "Metadata Schema" => "manual/metadata.md",
             "CUDA-Q Sampler Design" => "manual/cudaq-design.md",
+            "TKET / Nexus Sampler Design" => "manual/tket-nexus-design.md",
             "API Reference" => "manual/8-api.md",
         ],
         "Booklet" => [
