@@ -67,35 +67,45 @@ precision, shot budgets, classical optimization budget, and seeding:
 
 1. **Variable ordering and isolated variables**:
    Retrieve the internal model in `QUBOTools.variables(sampler)` order (`1:n`)
-   using `n, h, J, α, β = QUBOTools.ising(sampler, :dict; sense = :min)` (or
-   `QUBOTools.qubo(sampler, :dict; sense = :min)` mapped via $x_i = (1 - z_i)/2$
-   with $z_i \in \{+1, -1\}$). All $n$ free logical variables—including isolated
-   variables with zero linear and quadratic coefficients—must be allocated a
-   qubit index $q_{i-1}$ (`0:(n - 1)`), initialized in $|+\rangle = H|0\rangle$,
-   acted on by the mixer unitary $U_B(\beta_l) = \prod_{i=0}^{n-1} R_X(2\beta_l, q_i)$,
-   and measured.
+   using `n, h, J, α, β = QUBOTools.ising(sampler, :dict; sense = :min)` (which
+   uses `QUBOTools`'s spin convention $s_i = 2x_i - 1 \in \{-1, +1\}$, i.e.,
+   $x_i = (1 + s_i)/2$ with $x_i = 0 \leftrightarrow s_i = -1$ and
+   $x_i = 1 \leftrightarrow s_i = +1$). All $n$ free logical variables—including
+   isolated variables with zero linear and quadratic coefficients—must be
+   allocated a qubit index $q_{i-1}$ (`0:(n - 1)`), initialized in
+   $|+\rangle = H|0\rangle$, acted on by the mixer unitary
+   $U_B(\beta_l) = \prod_{i=0}^{n-1} R_X(2\beta_l, q_i)$, and measured.
 2. **Cost Hamiltonian**:
-   Build the spin Hamiltonian
+   Under standard computational-basis bit encoding $|x_i\rangle$ ($b_i = \text{'0'} \leftrightarrow x_i = 0$,
+   $b_i = \text{'1'} \leftrightarrow x_i = 1$), the Pauli-$Z$ operator satisfies
+   $Z_{i-1}|x_i\rangle = (1 - 2x_i)|x_i\rangle = -s_i|x_i\rangle$. Substituting
+   $s_i = -Z_{i-1}$ into the `QUBOTools.ising` form (equivalently substituting
+   $x_i = (I - Z_{i-1})/2$ into `QUBOTools.qubo`) yields the Pauli-$Z$ spin
+   Hamiltonian:
    ```math
-   H_C = \sum_{i=1}^{n} h_i Z_{i-1} + \sum_{1 \le i < j \le n} J_{ij} Z_{i-1} Z_{j-1}
+   H_C = -\sum_{i=1}^{n} h_i Z_{i-1} + \sum_{1 \le i < j \le n} J_{ij} Z_{i-1} Z_{j-1}
    ```
-   using `cudaq.SpinOperator` terms (`spin.z(i - 1)` and
-   `spin.z(i - 1) * spin.z(j - 1)`). For $n = 0$ (all variables fixed or empty
-   model), bypass CUDA-Q circuit execution and emit a single `Sample{T,Int}` with
-   empty state `Int[]`, objective value $\alpha \beta$, and `final_num_reads`
-   reads.
+   built using `cudaq.SpinOperator` terms (`-h_i * spin.z(i - 1)` and
+   `J_{ij} * spin.z(i - 1) * spin.z(j - 1)`). For $n = 0$ (all variables fixed
+   or empty model), bypass CUDA-Q circuit execution and emit a single
+   `Sample{T,Int}` with empty state `Int[]`, objective value $\alpha \beta$, and
+   `final_num_reads` reads.
 3. **Bitstring decoding and independent energy scoring**:
    CUDA-Q `cudaq.sample(kernel, ...; shots_count = final_num_reads)` returns a
    `SampleResult` mapping measured bitstrings $b \in \{0, 1\}^n$ in register
    declaration order (`q[0]` through `q[n - 1]`) to shot counts $c_b \ge 1$ with
    $\sum_b c_b = \text{final\_num\_reads}$.
-   - Map each bit $b_k \in \{\text{'0'}, \text{'1'}\}$ to the sampler's working
-     domain (`z_k = b_k == '0' ? 1 : -1` in `:spin` under $|0\rangle \mapsto +1,
-     |1\rangle \mapsto -1$, or `x_k = b_k == '1' ? 1 : 0` in `:bool`).
-   - Compute the sample objective value $\lambda = \text{QUBOTools.value}(\psi, h, J, \alpha, \beta)$
-     directly with `QUBOTools.value` so that sense (`:min` / `:max`), scaling
-     $\alpha$, constant offset $\beta$, and fixed-variable contributions are
-     preserved identically to other JuliaQUBO drivers.
+   - Map each measured bit $b_k \in \{\text{'0'}, \text{'1'}\}$ to:
+     - `x_k = (b_k == '1' ? 1 : 0)` when constructing a `:bool` `SampleSet`
+       (`domain = :bool`), scored via
+       $\lambda = \text{QUBOTools.value}(x, L, Q, \alpha_q, \beta_q)$ from
+       `QUBOTools.qubo(sampler, :dict; sense = :min)`; or
+     - `s_k = (b_k == '1' ? 1 : -1) = -z_k` when constructing a `:spin`
+       `SampleSet` (`domain = :spin`), scored via
+       $\lambda = \text{QUBOTools.value}(s, h, J, \alpha, \beta)$ from
+       `QUBOTools.ising(sampler, :dict; sense = :min)`, so that both
+       `QUBOTools.value` and `QUBOTools.attach!`'s `SpinDomain => BoolDomain`
+       cast ($x_k = (s_k + 1)/2$) agree identically.
    - Construct `QUBOTools.Sample{T,Int}(ψ, λ, count)` so shot multiplicities are
      preserved as sample read counts.
 
