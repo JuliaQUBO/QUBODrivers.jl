@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.6.8 - 2026-10-25
+
+### Added
+
+- Add opt-in `AutoConfigure` problem-size parameter scaling (`configure!`,
+  `autoconfigure_schedule`, `autoconfigure_rule`) for sampler attributes (#65,
+  #105).
+
+### Documentation and maintenance
+
+- Document the optional CUDA-Q QAOA sampler package boundary and conformance
+  contract (#88, #106).
+- Document the optional TKET / Quantinuum Nexus sampler design and persistent
+  job-lifecycle contract (#89, #107).
+- Update exact-version Zenodo software citation metadata to `v0.6.7`
+  (`10.5281/zenodo.23599534`).
+
 ## v0.6.7 - 2026-10-23
 
 ### Added

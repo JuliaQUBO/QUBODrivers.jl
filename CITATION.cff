@@ -26,13 +26,13 @@ abstract: >-
 repository-code: "https://github.com/JuliaQUBO/QUBODrivers.jl"
 url: "https://juliaqubo.github.io/QUBODrivers.jl/"
 license: MPL-2.0
-version: "0.6.7"
-date-released: 2026-10-23
+version: "0.6.8"
+date-released: 2026-10-25
 doi: "10.5281/zenodo.7811951"
 identifiers:
   - type: doi
-    value: "10.5281/zenodo.23420133"
-    description: "Zenodo DOI for version 0.6.6"
+    value: "10.5281/zenodo.23599534"
+    description: "Zenodo DOI for version 0.6.7"
 keywords:
   - Julia
   - mathematical optimization
