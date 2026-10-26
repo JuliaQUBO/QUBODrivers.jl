@@ -544,122 +544,123 @@ function QUBODrivers.sample(sampler::Optimizer{T}) where {T}
         error("TKETOpt mode '$execution_mode' requires a non-empty `nexus_project` attribute.")
     end
 
-    t_start = time()
     rng = isnothing(seed) ? Random.MersenneTwister(0x74E7_2026) : Random.MersenneTwister(Int(seed))
     samples = Sample{T,Int}[]
     iterations_performed = 0
     circuit_evaluations  = 0
 
-    if n == 0
-        const_val = convert(T, α * β)
-        push!(samples, Sample{T,Int}(Int[], const_val, final_num_reads))
-    else
-        best_params = isnothing(initial_point) ?
-            Float64[0.3 + 0.1 * (k / (2 * p)) for k in 1:(2 * p)] :
-            copy(initial_point)
-        best_gates = build_tket_qaoa_circuit(n, h, J, best_params, p)
-        best_probs = _simulate_tket_circuit_probabilities(n, best_gates)
-
-        # Evaluate expected Ising energy under computational basis bit mapping s_i = 2b_i - 1
-        function _expected_ising_energy(probs::Vector{Float64})
-            total = 0.0
-            for idx in 0:((1 << n) - 1)
-                e = 0.0
-                for (i, hi) in h
-                    s_i = 2 * ((idx >> (i - 1)) & 1) - 1
-                    e += Float64(hi) * s_i
-                end
-                for ((i, j), Jij) in J
-                    s_i = 2 * ((idx >> (i - 1)) & 1) - 1
-                    s_j = 2 * ((idx >> (j - 1)) & 1) - 1
-                    e += Float64(Jij) * s_i * s_j
-                end
-                total += probs[idx + 1] * e
-            end
-            return total
-        end
-
-        best_exp = _expected_ising_energy(best_probs)
-        iterations_performed = 1
-        circuit_evaluations  = 1
-        step_scale = 0.45
-
-        for _ in 2:max_iterations
-            cand_params = Float64[
-                best_params[k] + step_scale * (2.0 * rand(rng) - 1.0) for k in 1:(2 * p)
-            ]
-            cand_gates = build_tket_qaoa_circuit(n, h, J, cand_params, p)
-            cand_probs = _simulate_tket_circuit_probabilities(n, cand_gates)
-            cand_exp   = _expected_ising_energy(cand_probs)
-            iterations_performed += 1
-            circuit_evaluations  += 1
-            if cand_exp < best_exp
-                best_exp    = cand_exp
-                best_params = cand_params
-                best_gates  = cand_gates
-                best_probs  = cand_probs
-            end
-            step_scale *= 0.92
-        end
-
-        logical_counts = if execution_mode == "local_tket"
-            phys_counts = _sample_physical_counts(rng, best_probs, n, final_num_reads, perm)
-            circuit_evaluations += 1
-            get_counts_logical_cbits(phys_counts, perm)
+    timed_run = @timed begin
+        if n == 0
+            const_val = convert(T, α * β)
+            push!(samples, Sample{T,Int}(Int[], const_val, final_num_reads))
         else
-            client = isnothing(nexus_client) ? MockNexusClient() : nexus_client::MockNexusClient
-            outcome, counts, job_rec = _execute_nexus_lifecycle!(
-                client,
-                n,
-                best_probs,
-                final_num_reads,
-                perm,
-                rng;
-                backend_name     = backend_name,
-                nexus_project    = String(nexus_project),
-                persistence_path = persistence_path,
-                resume_job_id    = resume_job_id,
-                poll_timeout_sec = poll_timeout_sec,
-                poll_interval_sec = poll_interval_sec,
-                cancel_on_timeout = cancel_on_timeout,
-            )
-            push!(
-                nexus_job_records,
-                Dict{String,Any}(
-                    "compile_job_id"   => job_rec["compile_job_id"],
-                    "execute_job_id"   => job_rec["execute_job_id"],
-                    "status"           => job_rec["status"],
-                    "recovered"        => job_rec["recovered"],
-                    "cancel_requested" => job_rec["cancel_requested"],
-                    "cancelled"        => job_rec["cancelled"],
-                ),
-            )
-            if outcome === :timeout
-                _attach_failure_state!(sampler, MOI.TIME_LIMIT, "nexus_poll_timeout", tket_meta, origin)
-                error(
-                    "Quantinuum Nexus poll timeout after $(poll_timeout_sec)s for " *
-                    "execute_job_id='$(job_rec["execute_job_id"])' " *
-                    "(status='$(job_rec["status"])', cancel_requested=$(job_rec["cancel_requested"]), " *
-                    "cancelled=$(job_rec["cancelled"])).",
-                )
-            elseif outcome === :failed
-                _attach_failure_state!(sampler, MOI.OTHER_ERROR, "nexus_job_failed", tket_meta, origin)
-                error(
-                    "Quantinuum Nexus job failed with remote status '$(job_rec["status"])' " *
-                    "for execute_job_id='$(job_rec["execute_job_id"])'.",
-                )
-            end
-            circuit_evaluations += 1
-            counts
-        end
+            best_params = isnothing(initial_point) ?
+                Float64[0.3 + 0.1 * (k / (2 * p)) for k in 1:(2 * p)] :
+                copy(initial_point)
+            best_gates = build_tket_qaoa_circuit(n, h, J, best_params, p)
+            best_probs = _simulate_tket_circuit_probabilities(n, best_gates)
 
-        for (bits, count) in logical_counts
-            λ = QUBOTools.value(bits, L, Q, α_q, β_q)
-            push!(samples, Sample{T,Int}(bits, λ, count))
+            # Evaluate expected Ising energy under computational basis bit mapping s_i = 2b_i - 1
+            function _expected_ising_energy(probs::Vector{Float64})
+                total = 0.0
+                for idx in 0:((1 << n) - 1)
+                    e = 0.0
+                    for (i, hi) in h
+                        s_i = 2 * ((idx >> (i - 1)) & 1) - 1
+                        e += Float64(hi) * s_i
+                    end
+                    for ((i, j), Jij) in J
+                        s_i = 2 * ((idx >> (i - 1)) & 1) - 1
+                        s_j = 2 * ((idx >> (j - 1)) & 1) - 1
+                        e += Float64(Jij) * s_i * s_j
+                    end
+                    total += probs[idx + 1] * e
+                end
+                return total
+            end
+
+            best_exp = _expected_ising_energy(best_probs)
+            iterations_performed = 1
+            circuit_evaluations  = 1
+            step_scale = 0.45
+
+            for _ in 2:max_iterations
+                cand_params = Float64[
+                    best_params[k] + step_scale * (2.0 * rand(rng) - 1.0) for k in 1:(2 * p)
+                ]
+                cand_gates = build_tket_qaoa_circuit(n, h, J, cand_params, p)
+                cand_probs = _simulate_tket_circuit_probabilities(n, cand_gates)
+                cand_exp   = _expected_ising_energy(cand_probs)
+                iterations_performed += 1
+                circuit_evaluations  += 1
+                if cand_exp < best_exp
+                    best_exp    = cand_exp
+                    best_params = cand_params
+                    best_gates  = cand_gates
+                    best_probs  = cand_probs
+                end
+                step_scale *= 0.92
+            end
+
+            logical_counts = if execution_mode == "local_tket"
+                phys_counts = _sample_physical_counts(rng, best_probs, n, final_num_reads, perm)
+                circuit_evaluations += 1
+                get_counts_logical_cbits(phys_counts, perm)
+            else
+                client = isnothing(nexus_client) ? MockNexusClient() : nexus_client::MockNexusClient
+                outcome, counts, job_rec = _execute_nexus_lifecycle!(
+                    client,
+                    n,
+                    best_probs,
+                    final_num_reads,
+                    perm,
+                    rng;
+                    backend_name     = backend_name,
+                    nexus_project    = String(nexus_project),
+                    persistence_path = persistence_path,
+                    resume_job_id    = resume_job_id,
+                    poll_timeout_sec = poll_timeout_sec,
+                    poll_interval_sec = poll_interval_sec,
+                    cancel_on_timeout = cancel_on_timeout,
+                )
+                push!(
+                    nexus_job_records,
+                    Dict{String,Any}(
+                        "compile_job_id"   => job_rec["compile_job_id"],
+                        "execute_job_id"   => job_rec["execute_job_id"],
+                        "status"           => job_rec["status"],
+                        "recovered"        => job_rec["recovered"],
+                        "cancel_requested" => job_rec["cancel_requested"],
+                        "cancelled"        => job_rec["cancelled"],
+                    ),
+                )
+                if outcome === :timeout
+                    _attach_failure_state!(sampler, MOI.TIME_LIMIT, "nexus_poll_timeout", tket_meta, origin)
+                    error(
+                        "Quantinuum Nexus poll timeout after $(poll_timeout_sec)s for " *
+                        "execute_job_id='$(job_rec["execute_job_id"])' " *
+                        "(status='$(job_rec["status"])', cancel_requested=$(job_rec["cancel_requested"]), " *
+                        "cancelled=$(job_rec["cancelled"])).",
+                    )
+                elseif outcome === :failed
+                    _attach_failure_state!(sampler, MOI.OTHER_ERROR, "nexus_job_failed", tket_meta, origin)
+                    error(
+                        "Quantinuum Nexus job failed with remote status '$(job_rec["status"])' " *
+                        "for execute_job_id='$(job_rec["execute_job_id"])'.",
+                    )
+                end
+                circuit_evaluations += 1
+                counts
+            end
+
+            for (bits, count) in logical_counts
+                λ = QUBOTools.value(bits, L, Q, α_q, β_q)
+                push!(samples, Sample{T,Int}(bits, λ, count))
+            end
         end
     end
 
-    elapsed = max(time() - t_start, 0.0)
+    elapsed = max(timed_run.time, eps(Float64))
     seeds_dict = isnothing(seed) ? Dict{String,Any}() : Dict{String,Any}("sampler" => Int(seed))
 
     metadata = QUBODrivers._sampler_metadata(

@@ -309,7 +309,6 @@ function QUBODrivers.sample(sampler::Optimizer{T}) where {T}
     end
 
     return @lock _TARGET_LOCK begin
-        t_start = time()
         resolved = _resolve_target_and_precision(
             requested_target,
             target_option,
@@ -354,47 +353,49 @@ function QUBODrivers.sample(sampler::Optimizer{T}) where {T}
         iterations_performed = 0
         circuit_evaluations  = 0
 
-        if n == 0
-            const_val = convert(T, α * β)
-            push!(samples, Sample{T,Int}(Int[], const_val, final_num_reads))
-        else
-            diag_cost = _cost_hamiltonian_diagonal(n, h, J)
-            best_params = isnothing(initial_point) ?
-                Float64[0.35 + 0.1 * (k / (2 * p)) for k in 1:(2 * p)] :
-                copy(initial_point)
+        timed_run = @timed begin
+            if n == 0
+                const_val = convert(T, α * β)
+                push!(samples, Sample{T,Int}(Int[], const_val, final_num_reads))
+            else
+                diag_cost = _cost_hamiltonian_diagonal(n, h, J)
+                best_params = isnothing(initial_point) ?
+                    Float64[0.35 + 0.1 * (k / (2 * p)) for k in 1:(2 * p)] :
+                    copy(initial_point)
 
-            best_probs = _qaoa_statevector(n, diag_cost, best_params, p)
-            best_exp   = sum(best_probs[i] * diag_cost[i] for i in eachindex(diag_cost))
-            circuit_evaluations  = 1
-            iterations_performed = 1
+                best_probs = _qaoa_statevector(n, diag_cost, best_params, p)
+                best_exp   = sum(best_probs[i] * diag_cost[i] for i in eachindex(diag_cost))
+                circuit_evaluations  = 1
+                iterations_performed = 1
 
-            step_scale = 0.45
-            for iter in 2:max_iterations
-                cand_params = Float64[
-                    best_params[k] + step_scale * (2.0 * rand(rng) - 1.0) for k in 1:(2 * p)
-                ]
-                cand_probs = _qaoa_statevector(n, diag_cost, cand_params, p)
-                cand_exp   = sum(cand_probs[i] * diag_cost[i] for i in eachindex(diag_cost))
-                circuit_evaluations  += 1
-                iterations_performed += 1
-                if cand_exp < best_exp
-                    best_exp    = cand_exp
-                    best_params = cand_params
-                    best_probs  = cand_probs
+                step_scale = 0.45
+                for iter in 2:max_iterations
+                    cand_params = Float64[
+                        best_params[k] + step_scale * (2.0 * rand(rng) - 1.0) for k in 1:(2 * p)
+                    ]
+                    cand_probs = _qaoa_statevector(n, diag_cost, cand_params, p)
+                    cand_exp   = sum(cand_probs[i] * diag_cost[i] for i in eachindex(diag_cost))
+                    circuit_evaluations  += 1
+                    iterations_performed += 1
+                    if cand_exp < best_exp
+                        best_exp    = cand_exp
+                        best_params = cand_params
+                        best_probs  = cand_probs
+                    end
+                    step_scale *= 0.92
                 end
-                step_scale *= 0.92
-            end
 
-            counts = _sample_bitstring_counts(rng, best_probs, n, final_num_reads)
-            circuit_evaluations += 1
+                counts = _sample_bitstring_counts(rng, best_probs, n, final_num_reads)
+                circuit_evaluations += 1
 
-            for (bits, count) in counts
-                λ = QUBOTools.value(bits, L, Q, α_q, β_q)
-                push!(samples, Sample{T,Int}(bits, λ, count))
+                for (bits, count) in counts
+                    λ = QUBOTools.value(bits, L, Q, α_q, β_q)
+                    push!(samples, Sample{T,Int}(bits, λ, count))
+                end
             end
         end
 
-        elapsed = max(time() - t_start, 0.0)
+        elapsed = max(timed_run.time, eps(Float64))
         exec_mode = resolved.selected_target == "qpp-cpu" ? "local_cpu_simulator" : "cudaq_target"
         seeds_dict = isnothing(seed) ? Dict{String,Any}() : Dict{String,Any}("sampler" => Int(seed))
 
