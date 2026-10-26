@@ -38,6 +38,7 @@ include("identity_sampler.jl")
 include("mip_sampler.jl")
 include("random_sampler.jl")
 include("benchmark.jl")
+include("optional_qaoa_prototypes.jl")
 
 function test_sampler_bundle()
     @testset "□ Utility Samplers Bundle" verbose = true begin
@@ -46,6 +47,8 @@ function test_sampler_bundle()
         test_mip_sampler()
         test_random_sampler()
         test_benchmark_helper()
+        test_cudaq_qaoa_prototype()
+        test_tket_nexus_prototype()
     end
 
     return nothing

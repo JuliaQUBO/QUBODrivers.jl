@@ -316,10 +316,13 @@ external package.
 ### Optional External Sampler Designs
 
 Before a new provider or hardware-SDK sampler package has a standalone
-repository, its public driver contract, model/sample mapping, and local
-conformance test plan are tracked as bounded design notes:
+repository, its public driver contract, model/sample mapping, and executable
+credential-free conformance prototype are maintained in `QUBODrivers.jl`
+without adding vendor SDK dependencies to core packages:
 
-- [Optional CUDA-Q QAOA Sampler Design](@ref) (`CUDAQOpt.jl` design contract,
-  tracked under [`JuliaQUBO/QUBODrivers.jl#88`](https://github.com/JuliaQUBO/QUBODrivers.jl/issues/88)).
+- [Optional CUDA-Q QAOA Sampler Design](@ref) (`CUDAQOpt.jl` design contract and
+  `examples/cudaq_qaoa_prototype.jl` reference prototype, tracked under
+  [`JuliaQUBO/QUBODrivers.jl#88`](https://github.com/JuliaQUBO/QUBODrivers.jl/issues/88)).
 - [Optional TKET / Quantinuum Nexus Sampler Design](@ref) (`TKETOpt.jl` design
-  contract, tracked under [`JuliaQUBO/QUBODrivers.jl#89`](https://github.com/JuliaQUBO/QUBODrivers.jl/issues/89)).
+  contract and `examples/tket_nexus_prototype.jl` reference prototype, tracked
+  under [`JuliaQUBO/QUBODrivers.jl#89`](https://github.com/JuliaQUBO/QUBODrivers.jl/issues/89)).

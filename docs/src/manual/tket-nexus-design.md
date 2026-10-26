@@ -9,12 +9,17 @@ It specifies package ownership, the separation between credential-free local
 circuit bit mapping, persistent Nexus job recovery without duplicate paid
 submissions, and the local conformance and mocked lifecycle test plan.
 
-!!! note "Design Status and Package Boundary"
-    `QUBODrivers.jl` hosts this interface specification and conformance checklist
-    only; it does **not** import `pytket` or `qnexus`, and no TKET or Quantinuum
-    SDK dependencies are added to `QUBODrivers.jl`, `QUBOTools.jl`, `ToQUBO.jl`,
-    `QUBO.jl`, or `QUBODecomposition.jl`. Once the standalone repository is
-    bootstrapped and passes conformance, it will be added to the
+!!! note "Design Status, Executable Conformance Prototype, and Package Boundary"
+    `QUBODrivers.jl` hosts this interface specification, the self-contained
+    executable conformance prototype in
+    `examples/tket_nexus_prototype.jl` (`TKETOptPrototype.QAOA.Optimizer`,
+    exercised in CI by `test/drivers/optional_qaoa_prototypes.jl`), and the
+    conformance checklist only; it does **not** import `pytket` or `qnexus`, and
+    no TKET or Quantinuum SDK dependencies are added to `QUBODrivers.jl`,
+    `QUBOTools.jl`, `ToQUBO.jl`, `QUBO.jl`, or `QUBODecomposition.jl`. Standalone
+    package publication (`TKETOpt.jl`) is explicitly deferred until a dedicated
+    wrapper repository with an isolated `pytket` / `qnexus` Python environment is
+    provisioned; when published, it will be added to the
     [External Sampler Packages](@ref) table in
     [`docs/src/manual/3-samplers.md`](3-samplers.md).
 

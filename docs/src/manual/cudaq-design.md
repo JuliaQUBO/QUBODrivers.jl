@@ -8,12 +8,16 @@ surface, target and precision semantics, credential-free CPU conformance
 testing, and the Python/CUDA-Q environment probe required before runtime
 publication in a dedicated wrapper repository.
 
-!!! note "Design Status and Package Boundary"
-    `QUBODrivers.jl` hosts this interface specification and conformance checklist
-    only; it does **not** depend on `PythonCall` at runtime for CUDA-Q, import
-    `cudaq`, or bundle GPU/vendor SDKs in core `QUBODrivers.jl` or `QUBO.jl`.
-    Once the standalone repository is bootstrapped and passes conformance, it
-    will be added to the [External Sampler Packages](@ref) table in
+!!! note "Design Status, Executable Conformance Prototype, and Package Boundary"
+    `QUBODrivers.jl` hosts this interface specification, the self-contained
+    executable conformance prototype in
+    `examples/cudaq_qaoa_prototype.jl` (`CUDAQOptPrototype.QAOA.Optimizer`,
+    exercised in CI by `test/drivers/optional_qaoa_prototypes.jl`), and the
+    conformance checklist only; it does **not** depend on `PythonCall` at runtime
+    for CUDA-Q, import `cudaq`, or bundle GPU/vendor SDKs in core `QUBODrivers.jl`
+    or `QUBO.jl`. Standalone package publication (`CUDAQOpt.jl`) is explicitly
+    deferred until a dedicated wrapper repository is provisioned; when published,
+    it will be added to the [External Sampler Packages](@ref) table in
     [`docs/src/manual/3-samplers.md`](3-samplers.md).
 
 ## Ownership and Package Placement
