@@ -550,6 +550,7 @@ function QUBODrivers.sample(sampler::Optimizer{T}) where {T}
     circuit_evaluations  = 0
 
     timed_run = @timed begin
+        t0_ns = time_ns()
         if n == 0
             const_val = convert(T, α * β)
             push!(samples, Sample{T,Int}(Int[], const_val, final_num_reads))
@@ -658,9 +659,12 @@ function QUBODrivers.sample(sampler::Optimizer{T}) where {T}
                 push!(samples, Sample{T,Int}(bits, λ, count))
             end
         end
+        while time_ns() == t0_ns
+            yield()
+        end
     end
 
-    elapsed = max(timed_run.time, eps(Float64))
+    elapsed = timed_run.time
     seeds_dict = isnothing(seed) ? Dict{String,Any}() : Dict{String,Any}("sampler" => Int(seed))
 
     metadata = QUBODrivers._sampler_metadata(
