@@ -15,7 +15,7 @@ module CUDAQOptPrototype
 
 import QUBODrivers
 import QUBODrivers: MOI, QUBOTools, Sample, SampleSet
-using Random
+const Random = QUBODrivers.RandomSampler.Random
 
 """
     probe_cudaq_environment(; pyimport_fn = nothing)
@@ -66,7 +66,8 @@ module QAOA
 
 import QUBODrivers
 import QUBODrivers: MOI, QUBOTools, Sample, SampleSet
-using Random
+const Random = QUBODrivers.RandomSampler.Random
+const AbstractRNG = Random.AbstractRNG
 
 const _TARGET_LOCK = ReentrantLock()
 const _PROCESS_ACTIVE_TARGET = Ref{Tuple{String,String}}(("qpp-cpu", "fp64"))

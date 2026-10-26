@@ -22,7 +22,7 @@ module TKETOptPrototype
 
 import QUBODrivers
 import QUBODrivers: MOI, QUBOTools, Sample, SampleSet
-using Random
+const Random = QUBODrivers.RandomSampler.Random
 
 """
     probe_tket_environment(; pyimport_fn = nothing)
@@ -78,7 +78,8 @@ module QAOA
 
 import QUBODrivers
 import QUBODrivers: MOI, QUBOTools, Sample, SampleSet
-using Random
+const Random = QUBODrivers.RandomSampler.Random
+const AbstractRNG = Random.AbstractRNG
 
 const _VALID_EXECUTION_MODES = ("local_tket", "nexus_emulator", "nexus_hardware")
 
