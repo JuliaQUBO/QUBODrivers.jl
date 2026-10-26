@@ -13,9 +13,8 @@
 
 module CUDAQOptPrototype
 
-import QUBOTools
 import QUBODrivers
-import QUBODrivers: MOI, Sample, SampleSet
+import QUBODrivers: MOI, QUBOTools, Sample, SampleSet
 using Random
 
 """
@@ -65,9 +64,8 @@ end
 
 module QAOA
 
-import QUBOTools
 import QUBODrivers
-import QUBODrivers: MOI, Sample, SampleSet
+import QUBODrivers: MOI, QUBOTools, Sample, SampleSet
 using Random
 
 const _TARGET_LOCK = ReentrantLock()

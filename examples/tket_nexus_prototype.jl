@@ -20,9 +20,8 @@
 
 module TKETOptPrototype
 
-import QUBOTools
 import QUBODrivers
-import QUBODrivers: MOI, Sample, SampleSet
+import QUBODrivers: MOI, QUBOTools, Sample, SampleSet
 using Random
 
 """
@@ -77,9 +76,8 @@ end
 
 module QAOA
 
-import QUBOTools
 import QUBODrivers
-import QUBODrivers: MOI, Sample, SampleSet
+import QUBODrivers: MOI, QUBOTools, Sample, SampleSet
 using Random
 
 const _VALID_EXECUTION_MODES = ("local_tket", "nexus_emulator", "nexus_hardware")
