@@ -29,6 +29,7 @@ const _NUMBER_OF_READS_RAW       = "num_reads"
 const _RANDOM_SEED_RAW           = "seed"
 const _FINAL_NUMBER_OF_READS_RAW = "final_num_reads"
 const _AUTO_CONFIGURE_RAW        = "auto_configure"
+const _PREPROCESS_RAW            = "preprocess"
 const _POST_SAMPLE_CALLBACK_RAW  = "post_sample_callback"
 const _POST_SAMPLE_TRANSFORM_RAW = "post_sample_transform"
 
@@ -36,8 +37,20 @@ const _RawNumberOfReads       = RawSamplerAttribute{Symbol(_NUMBER_OF_READS_RAW)
 const _RawRandomSeed          = RawSamplerAttribute{Symbol(_RANDOM_SEED_RAW)}
 const _RawFinalNumberOfReads  = RawSamplerAttribute{Symbol(_FINAL_NUMBER_OF_READS_RAW)}
 const _RawAutoConfigure       = RawSamplerAttribute{Symbol(_AUTO_CONFIGURE_RAW)}
+const _RawPreprocess          = RawSamplerAttribute{Symbol(_PREPROCESS_RAW)}
 const _RawPostSampleCallback  = RawSamplerAttribute{Symbol(_POST_SAMPLE_CALLBACK_RAW)}
 const _RawPostSampleTransform = RawSamplerAttribute{Symbol(_POST_SAMPLE_TRANSFORM_RAW)}
+
+const _VALID_PREPROCESS_RULES = (
+    :none,
+    :strong,
+    :weak,
+    :dominance,
+    :elimination,
+    :relations,
+    :mixed,
+    :identity,
+)
 
 @doc raw"""
     RandomSeed()
@@ -84,6 +97,38 @@ clamp scaled parameters to explicit finite bounds, and log the chosen scaling
 details under `metadata["auto_configure"]`.
 """
 struct AutoConfigure <: SamplerAttribute end
+
+@doc raw"""
+    Preprocess()
+
+Generic opt-in sampler optimizer attribute enabling automatic polynomial-time
+QUBO/Ising model reduction and exact sample reconstruction via
+`QUBOPreprocessing.jl`.
+
+The raw optimizer attribute key is `"preprocess"`, and the default value is
+`:none` (preprocessing disabled). Supported values (normalized to `Symbol` on
+assignment) are:
+
+- `:none` (or `false`, `nothing`): disable preprocessing (default);
+- `:strong` (or `true`, `:all`): run the full strong ground-state-preserving
+  polynomial-time reduction pipeline (`integerize_scale=true`, dominance,
+  degree-1/2/3 variable elimination, equivalent/opposite variable relations,
+  star-triangle degree-3 reduction, roof duality/autarky, submodular cut,
+  max-cut, and two-literal probing);
+- `:weak`: run the full weak optimum-preserving polynomial-time reduction
+  pipeline (allowing weak ties in dominance, relations, submodular cut, and
+  max-cut);
+- `:dominance`, `:elimination`, `:relations`, `:mixed`, or `:identity`: run the
+  corresponding `QUBOPreprocessing.preprocess` rule schedule.
+
+When enabled (`preprocess_rules(sampler) !== :none`), `MOI.optimize!`
+automatically reduces the sampler's model prior to calling [`sample`](@ref),
+solves the reduced model on the surviving active variables, reconstructs all
+returned samples back to the full $n$-variable space via
+`QUBOPreprocessing.reconstruct`, and records preprocessing telemetry under
+`metadata["preprocess"]` and `metadata["time"]["preprocess"]`.
+"""
+struct Preprocess <: SamplerAttribute end
 
 @doc raw"""
     PostSampleCallback()
@@ -243,6 +288,26 @@ function auto_configure(sampler::AbstractSampler)::Bool
     end
 
     return enabled::Bool
+end
+
+@doc raw"""
+    preprocess_rules(sampler)::Symbol
+
+Return the normalized [`Preprocess`](@ref) rule mode configured on `sampler`
+(`:none`, `:strong`, `:weak`, `:dominance`, `:elimination`, `:relations`,
+`:mixed`, or `:identity`). Samplers that do not support the attribute default
+to `:none`.
+"""
+function preprocess_rules(sampler::AbstractSampler)::Symbol
+    attr = _RawPreprocess()
+
+    value = try
+        MOI.get(sampler, attr)
+    catch err
+        _is_unavailable_raw_attr(err, attr) ? :none : rethrow()
+    end
+
+    return _normalize_preprocess_rules(value)
 end
 
 @doc raw"""
@@ -500,12 +565,40 @@ function _validate_auto_configure(value)
     return nothing
 end
 
+function _normalize_preprocess_rules(value)::Symbol
+    if isnothing(value) || value === false || value === :none || value === :off
+        return :none
+    elseif value === true || value === :strong || value === :all
+        return :strong
+    elseif value isa AbstractString
+        lower = lowercase(strip(value))
+        if lower in ("none", "false", "off")
+            return :none
+        elseif lower in ("strong", "true", "all")
+            return :strong
+        else
+            sym = Symbol(lower)
+            sym in _VALID_PREPROCESS_RULES && return sym
+        end
+    elseif value isa Symbol && value in _VALID_PREPROCESS_RULES
+        return value
+    end
+
+    error(
+        "Value for 'Preprocess' must be a boolean, 'nothing', or one of " *
+        "`:none`, `:strong`, `:weak`, `:dominance`, `:elimination`, `:relations`, " *
+        "`:mixed`, or `:identity`; got $(repr(value))",
+    )
+end
+
 MOIU.map_indices(_, ::RandomSeed, value) = value
 MOIU.map_indices(_, ::_RawRandomSeed, value) = value
 MOIU.map_indices(_, ::FinalNumberOfReads, value) = value
 MOIU.map_indices(_, ::_RawFinalNumberOfReads, value) = value
 MOIU.map_indices(_, ::AutoConfigure, value) = value
 MOIU.map_indices(_, ::_RawAutoConfigure, value) = value
+MOIU.map_indices(_, ::Preprocess, value) = value
+MOIU.map_indices(_, ::_RawPreprocess, value) = value
 MOIU.map_indices(_, ::PostSampleCallback, value) = value
 MOIU.map_indices(_, ::_RawPostSampleCallback, value) = value
 MOIU.map_indices(_, ::PostSampleTransform, value) = value

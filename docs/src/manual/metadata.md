@@ -142,6 +142,24 @@ accepts `FinalNumberOfReads` but reports `honors_final_reads == false`. See its
 [results contract](https://juliaqubo.github.io/QUBODecomposition.jl/dev/results/)
 and [Public composition pattern](@ref) for conservative result/status handling.
 
+## Preprocessing Metadata
+
+When `QUBODrivers.Preprocess()` (raw key `"preprocess"`) is set to an active
+`QUBOPreprocessing.jl` rule mode (`:strong`, `:weak`, `:dominance`,
+`:elimination`, `:relations`, `:mixed`, or `:identity`), `QUBODrivers` stamps
+`metadata["preprocess"]` and `metadata["time"]["preprocess"]`:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `metadata["preprocess"]["enabled"]` | `Bool` | `true` when preprocessing ran prior to `sample`. |
+| `metadata["preprocess"]["rules"]` | `String` | Active rule mode name (e.g., `"strong"` or `"weak"`). |
+| `metadata["preprocess"]["original_variables"]` | non-negative `Integer` | Variable count before preprocessing. |
+| `metadata["preprocess"]["reduced_variables"]` | non-negative `Integer` | Variable count of the reduced model passed to `sample`. |
+| `metadata["preprocess"]["removed_variables"]` | non-negative `Integer` | Total variables removed (`original_variables - reduced_variables`). |
+| `metadata["preprocess"]["reduction_steps"]` | non-negative `Integer` | Number of certified reduction steps recorded in the certificate. |
+| `metadata["preprocess"]["time"]` | non-negative `Real` | Combined wall-clock seconds spent in model reduction and sample reconstruction. |
+| `metadata["time"]["preprocess"]` | non-negative `Real` | Combined wall-clock seconds spent in model reduction and sample reconstruction (mirrored in `metadata["time"]`). |
+
 ## Checking metadata
 
 ```julia

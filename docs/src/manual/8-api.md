@@ -31,6 +31,8 @@ QUBODrivers.AutoConfigure
 QUBODrivers.auto_configure
 QUBODrivers.supports_auto_configure
 QUBODrivers.has_explicit_raw_attr
+QUBODrivers.Preprocess
+QUBODrivers.preprocess_rules
 QUBODrivers.PostSampleCallback
 QUBODrivers.PostSampleTransform
 QUBODrivers.post_sample_callback

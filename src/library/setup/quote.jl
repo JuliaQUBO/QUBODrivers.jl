@@ -369,6 +369,38 @@ function __setup_quote_qubodrivers_attrs(spec::_SamplerSpec)
             ::Union{QUBODrivers.AutoConfigure,QUBODrivers._RawAutoConfigure},
         ) = true
 
+        # QUBODrivers.Preprocess - get
+        function MOI.get(sampler::$(Optimizer), ::QUBODrivers.Preprocess)
+            return QUBODrivers.preprocess_rules(sampler)
+        end
+
+        QUBODrivers.default_raw_attr(
+            ::$(Optimizer),
+            ::QUBODrivers._RawPreprocess,
+        ) = :none
+
+        # QUBODrivers.Preprocess - set
+        function MOI.set(sampler::$(Optimizer), ::QUBODrivers.Preprocess, value)
+            return MOI.set(sampler, QUBODrivers._RawPreprocess(), value)
+        end
+
+        function MOI.set(
+            sampler::$(Optimizer),
+            attr::QUBODrivers._RawPreprocess,
+            value,
+        )
+            normalized = QUBODrivers._normalize_preprocess_rules(value)
+            QUBODrivers.set_raw_attr!(sampler, attr, normalized)
+
+            return nothing
+        end
+
+        # QUBODrivers.Preprocess - support
+        MOI.supports(
+            ::$(Optimizer),
+            ::Union{QUBODrivers.Preprocess,QUBODrivers._RawPreprocess},
+        ) = true
+
         # QUBODrivers.PostSampleCallback - get
         function MOI.get(sampler::$(Optimizer), ::QUBODrivers.PostSampleCallback)
             return QUBODrivers.post_sample_callback(sampler)
