@@ -151,15 +151,14 @@ When `QUBODrivers.Preprocess()` (raw key `"preprocess"`) is set to an active
 
 | Field | Type | Meaning |
 | --- | --- | --- |
+| `metadata["preprocess"]["enabled"]` | `Bool` | `true` when preprocessing ran prior to `sample`. |
 | `metadata["preprocess"]["rules"]` | `String` | Active rule mode name (e.g., `"strong"` or `"weak"`). |
-| `metadata["preprocess"]["guarantee"]` | `String` | Guarantee of the reduction certificate (`"strong"`, `"weak"`, or `"none"`). |
-| `metadata["preprocess"]["initial_variables"]` | non-negative `Integer` | Variable count before preprocessing. |
+| `metadata["preprocess"]["original_variables"]` | non-negative `Integer` | Variable count before preprocessing. |
 | `metadata["preprocess"]["reduced_variables"]` | non-negative `Integer` | Variable count of the reduced model passed to `sample`. |
-| `metadata["preprocess"]["fixed_variables"]` | non-negative `Integer` | Number of variables fixed by unary dominance, probing, roof duality, or submodular cuts. |
-| `metadata["preprocess"]["eliminated_variables"]` | non-negative `Integer` | Number of variables eliminated by pair relations or bounded-degree local elimination. |
-| `metadata["preprocess"]["total_removed_variables"]` | non-negative `Integer` | Total variables removed (`initial_variables - reduced_variables`). |
-| `metadata["preprocess"]["reduction_ratio"]` | `Float64` in `[0.0, 1.0]` | Fraction of variables removed (`total_removed_variables / initial_variables`). |
-| `metadata["time"]["preprocess"]` | non-negative `Real` | Combined wall-clock seconds spent in model reduction and sample reconstruction. |
+| `metadata["preprocess"]["removed_variables"]` | non-negative `Integer` | Total variables removed (`original_variables - reduced_variables`). |
+| `metadata["preprocess"]["reduction_steps"]` | non-negative `Integer` | Number of certified reduction steps recorded in the certificate. |
+| `metadata["preprocess"]["time"]` | non-negative `Real` | Combined wall-clock seconds spent in model reduction and sample reconstruction. |
+| `metadata["time"]["preprocess"]` | non-negative `Real` | Combined wall-clock seconds spent in model reduction and sample reconstruction (mirrored in `metadata["time"]`). |
 
 ## Checking metadata
 

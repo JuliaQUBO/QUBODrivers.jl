@@ -1,3 +1,5 @@
+using GLPK
+
 module _PreprocessIntTestSampler
 import QUBODrivers
 import QUBODrivers: MOI, QUBOTools, Sample, SampleSet
@@ -6,7 +8,24 @@ QUBODrivers.@setup Optimizer begin
     version = QUBODrivers.__version__()
 end
 QUBODrivers.supported_domains(::Type{<:Optimizer}) = Set{Symbol}([:bool, :spin, :int])
-QUBODrivers.sample(sampler::Optimizer{T}) where {T} = SampleSet{T,Int}()
+function QUBODrivers.sample(sampler::Optimizer{T}) where {T}
+    n = QUBOTools.dimension(sampler)
+    s = Sample{T,Int}(zeros(Int, n), QUBOTools.value(sampler, zeros(Int, n)), 1)
+    return SampleSet{T,Int}(
+        [s];
+        metadata = Dict{String,Any}(
+            "origin"    => "test",
+            "status"    => "optimal",
+            "algorithm" => Dict{String,Any}("name" => "test"),
+            "backend"   => Dict{String,Any}("name" => "test", "version" => "0.1.0"),
+            "reads"     => Dict{String,Any}("number_of_reads" => 1, "final_number_of_reads" => 1),
+            "seeds"     => Dict{String,Any}(),
+            "time"      => Dict{String,Any}("effective" => 0.0),
+        ),
+        sense  = QUBOTools.sense(sampler),
+        domain = QUBOTools.domain(sampler),
+    )
+end
 end
 
 function test_preprocessing()
@@ -269,7 +288,125 @@ function test_preprocessing()
             @test isempty(QUBODrivers.validate_metadata(QUBOTools.solution(raw_rnd)))
         end
 
+        @testset "MIPSampler Integration & Failure Restoration" begin
+            mip_factory = MOI.OptimizerWithAttributes(GLPK.Optimizer, MOI.Silent() => true)
+
+            # 1. Complete reduction (n_reduced == 0) in MIN_SENSE and MAX_SENSE
+            for (sense, c1, c2, expected_val, expected_state) in (
+                (MOI.MIN_SENSE, -10.0, 12.0, -7.5, [1.0, 0.0]),
+                (MOI.MAX_SENSE, 10.0, -12.0, 12.5, [1.0, 0.0]),
+            )
+                mip_model = MOI.instantiate(
+                    MIPSampler.Optimizer{Float64};
+                    with_bridge_type = Float64,
+                )
+                MOI.set(mip_model, MIPSampler.MIPOptimizer(), mip_factory)
+                MOI.set(mip_model, QUBODrivers.Preprocess(), :strong)
+                x, _ = MOI.add_constrained_variables(mip_model, fill(MOI.ZeroOne(), 2))
+                MOI.set(mip_model, MOI.ObjectiveSense(), sense)
+                MOI.set(
+                    mip_model,
+                    MOI.ObjectiveFunction{MOI.ScalarQuadraticFunction{Float64}}(),
+                    MOI.ScalarQuadraticFunction(
+                        [MOI.ScalarQuadraticTerm(1.0, x[1], x[2])],
+                        [
+                            MOI.ScalarAffineTerm(c1, x[1]),
+                            MOI.ScalarAffineTerm(c2, x[2]),
+                        ],
+                        2.5,
+                    ),
+                )
+                MOI.optimize!(mip_model)
+                @test MOI.get(mip_model, MOI.TerminationStatus()) === MOI.OPTIMAL
+                @test MOI.get(mip_model, MOI.ObjectiveValue()) ≈ expected_val
+                @test MOI.get(mip_model, MOI.ObjectiveBound()) ≈ expected_val
+                @test MOI.get(mip_model, MOI.RelativeGap()) == 0.0
+                @test [MOI.get(mip_model, MOI.VariablePrimal(), xi) for xi in x] == expected_state
+                raw_mip = MOI.get(mip_model, MOI.RawSolver())
+                @test isempty(QUBODrivers.validate_metadata(QUBOTools.solution(raw_mip)))
+            end
+
+            # 2. Partial reduction with MIPSampler
+            mip_partial = MOI.instantiate(
+                MIPSampler.Optimizer{Float64};
+                with_bridge_type = Float64,
+            )
+            MOI.set(mip_partial, MIPSampler.MIPOptimizer(), mip_factory)
+            MOI.set(mip_partial, QUBODrivers.Preprocess(), :strong)
+            y, _ = MOI.add_constrained_variables(mip_partial, fill(MOI.ZeroOne(), 4))
+            MOI.set(mip_partial, MOI.ObjectiveSense(), MOI.MIN_SENSE)
+            MOI.set(
+                mip_partial,
+                MOI.ObjectiveFunction{MOI.ScalarQuadraticFunction{Float64}}(),
+                MOI.ScalarQuadraticFunction(
+                    [
+                        MOI.ScalarQuadraticTerm(-4.0, y[3], y[4]),
+                        MOI.ScalarQuadraticTerm(1.0, y[1], y[3]),
+                    ],
+                    [
+                        MOI.ScalarAffineTerm(-20.0, y[1]),
+                        MOI.ScalarAffineTerm(20.0, y[2]),
+                        MOI.ScalarAffineTerm(1.0, y[3]),
+                        MOI.ScalarAffineTerm(1.0, y[4]),
+                    ],
+                    0.0,
+                ),
+            )
+            MOI.optimize!(mip_partial)
+            @test MOI.get(mip_partial, MOI.TerminationStatus()) === MOI.OPTIMAL
+            @test MOI.get(mip_partial, MOI.ObjectiveValue()) ≈ -21.0
+            @test [MOI.get(mip_partial, MOI.VariablePrimal(), yi) for yi in y] == [1.0, 0.0, 1.0, 1.0]
+
+            # 3. Failure restoration preserves orig_model and MOI.OTHER_ERROR status
+            mip_fail = MOI.instantiate(
+                MIPSampler.Optimizer{Float64};
+                with_bridge_type = Float64,
+            )
+            MOI.set(
+                mip_fail,
+                MIPSampler.MIPOptimizer(),
+                () -> error("simulated MIP backend failure"),
+            )
+            MOI.set(mip_fail, QUBODrivers.Preprocess(), :strong)
+            w, _ = MOI.add_constrained_variables(mip_fail, fill(MOI.ZeroOne(), 3))
+            MOI.set(mip_fail, MOI.ObjectiveSense(), MOI.MIN_SENSE)
+            MOI.set(
+                mip_fail,
+                MOI.ObjectiveFunction{MOI.ScalarQuadraticFunction{Float64}}(),
+                MOI.ScalarQuadraticFunction(
+                    [MOI.ScalarQuadraticTerm(-4.0, w[2], w[3])],
+                    [
+                        MOI.ScalarAffineTerm(-20.0, w[1]),
+                        MOI.ScalarAffineTerm(1.0, w[2]),
+                        MOI.ScalarAffineTerm(1.0, w[3]),
+                    ],
+                    0.0,
+                ),
+            )
+            @test_throws ArgumentError MOI.optimize!(mip_fail)
+            raw_fail = MOI.get(mip_fail, MOI.RawSolver())
+            @test QUBOTools.dimension(QUBOTools.backend(raw_fail)) == 3
+            @test MOI.get(mip_fail, MOI.TerminationStatus()) === MOI.OTHER_ERROR
+            @test MOI.get(mip_fail, MOI.PrimalStatus()) === MOI.NO_SOLUTION
+        end
+
         @testset "Unsupported Domain Rejection" begin
+            # Quadratic :bool model on a multi-domain sampler works with Preprocess
+            ok_sampler = MOI.instantiate(
+                _PreprocessIntTestSampler.Optimizer{Float64};
+                with_bridge_type = Float64,
+            )
+            xb, _ = MOI.add_constrained_variables(ok_sampler, fill(MOI.ZeroOne(), 2))
+            MOI.set(ok_sampler, MOI.ObjectiveSense(), MOI.MIN_SENSE)
+            MOI.set(
+                ok_sampler,
+                MOI.ObjectiveFunction{MOI.ScalarAffineFunction{Float64}}(),
+                MOI.ScalarAffineFunction([MOI.ScalarAffineTerm(-5.0, xb[1])], 0.0),
+            )
+            MOI.set(ok_sampler, QUBODrivers.Preprocess(), :strong)
+            MOI.optimize!(ok_sampler)
+            @test MOI.get(ok_sampler, MOI.VariablePrimal(), xb[1]) == 1.0
+
             # Non-binary domain with Preprocess enabled throws ArgumentError
             dom_sampler = MOI.instantiate(
                 _PreprocessIntTestSampler.Optimizer{Float64};

@@ -116,8 +116,8 @@ assignment) are:
   star-triangle degree-3 reduction, roof duality/autarky, submodular cut,
   max-cut, and two-literal probing);
 - `:weak`: run the full weak optimum-preserving polynomial-time reduction
-  pipeline (allowing weak ties in dominance, relations, submodular cut,
-  max-cut, and probing);
+  pipeline (allowing weak ties in dominance, relations, submodular cut, and
+  max-cut);
 - `:dominance`, `:elimination`, `:relations`, `:mixed`, or `:identity`: run the
   corresponding `QUBOPreprocessing.preprocess` rule schedule.
 

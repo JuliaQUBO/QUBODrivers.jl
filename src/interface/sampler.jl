@@ -361,8 +361,7 @@ function _sample!(sampler::AbstractSampler{T}) where {T}
     end
 
     if _has_nonbinary_or_heterogeneous_domains(sampler) ||
-       (hasfield(typeof(sampler), :polynomial_objective) &&
-        !isnothing(getfield(sampler, :polynomial_objective)))
+       _has_higher_order_polynomial_objective(sampler)
         throw(
             ArgumentError(
                 "QUBOPreprocessing only supports quadratic binary (`:bool`) or spin (`:spin`) models.",
@@ -371,6 +370,11 @@ function _sample!(sampler::AbstractSampler{T}) where {T}
     end
 
     orig_model = QUBOTools.backend(sampler)::QUBOTools.Model{VI,T,Int}
+    orig_scope_sig = get(
+        QUBOTools.metadata(QUBOTools.solution(orig_model)),
+        "__mip_solve_scope_signature__",
+        nothing,
+    )
     prep_results = @timed _preprocess_sampler_model(orig_model, rules)
     exported, reduced_model = prep_results.value
     preprocess_time = prep_results.time
@@ -384,7 +388,12 @@ function _sample!(sampler::AbstractSampler{T}) where {T}
     finally
         if !sample_ok
             reduced_sol = QUBOTools.solution(reduced_model)
-            if !isempty(QUBOTools.metadata(reduced_sol))
+            reduced_meta = QUBOTools.metadata(reduced_sol)
+            if !isempty(reduced_meta)
+                if !isnothing(orig_scope_sig) &&
+                   haskey(reduced_meta, "__mip_solve_scope_signature__")
+                    reduced_meta["__mip_solve_scope_signature__"] = orig_scope_sig
+                end
                 QUBOTools.attach!(orig_model, reduced_sol)
             end
         end
@@ -471,7 +480,7 @@ function _run_preprocessing_workspace(
             allow_weak_relations = allow_weak,
         )
         Base.invokelatest(qp.apply_roof_duality!, ws)
-        Base.invokelatest(qp.apply_submodular_cut!, ws)
+        Base.invokelatest(qp.apply_submodular_cut!, ws; allow_weak = allow_weak)
         Base.invokelatest(qp.apply_maxcut!, ws; allow_weak = allow_weak)
         Base.invokelatest(qp.probe_variables!, ws; order = :coercive)
         Base.invokelatest(
@@ -621,6 +630,7 @@ function _reconstruct_preprocessed_sampleset(
     orig_domain = QUBOTools.domain(orig_model)
     raw_domain = QUBOTools.domain(raw_sampleset)
 
+    recon_t0 = time()
     lifted_samples = Vector{Sample{T,Int}}(undef, length(raw_sampleset))
     for (idx, sample) in enumerate(raw_sampleset)
         y_raw = QUBOTools.state(sample)
@@ -636,6 +646,7 @@ function _reconstruct_preprocessed_sampleset(
             QUBOTools.reads(sample),
         )
     end
+    total_preprocess_time = preprocess_time + (time() - recon_t0)
 
     cert = getfield(exported, :certificate)
     chain_len = length(getfield(cert, :reduction_chain))
@@ -647,20 +658,20 @@ function _reconstruct_preprocessed_sampleset(
         "reduced_variables"  => n_reduced,
         "removed_variables"  => n_orig - n_reduced,
         "reduction_steps"    => chain_len,
-        "time"               => preprocess_time,
+        "time"               => total_preprocess_time,
     )
 
     time_meta = get(metadata, "time", nothing)
     if time_meta isa AbstractDict
-        time_meta["preprocess"] = preprocess_time
+        time_meta["preprocess"] = total_preprocess_time
         eff = get(time_meta, "effective", nothing)
         if eff isa Real
-            time_meta["effective"] = Float64(eff) + preprocess_time
+            time_meta["effective"] = Float64(eff) + total_preprocess_time
         end
     else
         metadata["time"] = Dict{String,Any}(
-            "preprocess" => preprocess_time,
-            "effective"  => preprocess_time,
+            "preprocess" => total_preprocess_time,
+            "effective"  => total_preprocess_time,
         )
     end
 
