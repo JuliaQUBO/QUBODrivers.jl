@@ -151,6 +151,56 @@ function validate_metadata(metadata::AbstractDict)
             "metadata[\"time\"]",
             "effective",
         )
+        if haskey(time, "preprocess")
+            _require_nonnegative_real_metadata!(
+                violations,
+                time,
+                "metadata[\"time\"]",
+                "preprocess",
+            )
+        end
+    end
+
+    if haskey(metadata, "preprocess")
+        prep = _require_dict_metadata!(violations, metadata, "metadata", "preprocess")
+        if !isnothing(prep)
+            if haskey(prep, "enabled") && !(prep["enabled"] isa Bool)
+                push!(violations, "metadata[\"preprocess\"][\"enabled\"] must be a boolean")
+            elseif !haskey(prep, "enabled")
+                push!(violations, "metadata[\"preprocess\"] must contain key \"enabled\"")
+            end
+            _require_string_metadata!(violations, prep, "metadata[\"preprocess\"]", "rules")
+            _require_nonnegative_integer_metadata!(
+                violations,
+                prep,
+                "metadata[\"preprocess\"]",
+                "original_variables",
+            )
+            _require_nonnegative_integer_metadata!(
+                violations,
+                prep,
+                "metadata[\"preprocess\"]",
+                "reduced_variables",
+            )
+            _require_nonnegative_integer_metadata!(
+                violations,
+                prep,
+                "metadata[\"preprocess\"]",
+                "removed_variables",
+            )
+            _require_nonnegative_integer_metadata!(
+                violations,
+                prep,
+                "metadata[\"preprocess\"]",
+                "reduction_steps",
+            )
+            _require_nonnegative_real_metadata!(
+                violations,
+                prep,
+                "metadata[\"preprocess\"]",
+                "time",
+            )
+        end
     end
 
     if haskey(metadata, "auto_configure")
@@ -300,11 +350,345 @@ optimization.
 function set_model! end
 
 function _sample!(sampler::AbstractSampler{T}) where {T}
-    results = @timed sample(sampler)
+    rules = preprocess_rules(sampler)
 
-    _sample!(sampler, results.value, results.time)
+    if rules === :none
+        results = @timed sample(sampler)
+
+        _sample!(sampler, results.value, results.time)
+
+        return nothing
+    end
+
+    if _has_nonbinary_or_heterogeneous_domains(sampler) ||
+       (hasfield(typeof(sampler), :polynomial_objective) &&
+        !isnothing(getfield(sampler, :polynomial_objective)))
+        throw(
+            ArgumentError(
+                "QUBOPreprocessing only supports quadratic binary (`:bool`) or spin (`:spin`) models.",
+            ),
+        )
+    end
+
+    orig_model = QUBOTools.backend(sampler)::QUBOTools.Model{VI,T,Int}
+    prep_results = @timed _preprocess_sampler_model(orig_model, rules)
+    exported, reduced_model = prep_results.value
+    preprocess_time = prep_results.time
+
+    sample_ok = false
+    sample_results = try
+        set_model!(sampler, reduced_model)
+        res = @timed sample(sampler)
+        sample_ok = true
+        res
+    finally
+        if !sample_ok
+            reduced_sol = QUBOTools.solution(reduced_model)
+            if !isempty(QUBOTools.metadata(reduced_sol))
+                QUBOTools.attach!(orig_model, reduced_sol)
+            end
+        end
+        set_model!(sampler, orig_model)
+    end
+
+    recon_results = @timed _reconstruct_preprocessed_sampleset(
+        orig_model,
+        reduced_model,
+        exported,
+        sample_results.value,
+        rules,
+        preprocess_time,
+    )
+    lifted_sampleset = recon_results.value
+    total_time = preprocess_time + sample_results.time + recon_results.time
+
+    _sample!(sampler, lifted_sampleset, total_time)
 
     return nothing
+end
+
+function _model_to_float64(
+    model::QUBOTools.Model{VI,Float64,Int},
+)::QUBOTools.Model{VI,Float64,Int}
+    return model
+end
+
+function _model_to_float64(
+    model::QUBOTools.Model{VI,T,Int},
+)::QUBOTools.Model{VI,Float64,Int} where {T}
+    V_set = Set{VI}(QUBOTools.variables(model))
+    L_f64 = Dict{VI,Float64}(
+        QUBOTools.variable(model, i) => Float64(v)
+        for (i, v) in QUBOTools.linear_terms(model)
+    )
+    Q_f64 = Dict{Tuple{VI,VI},Float64}(
+        (QUBOTools.variable(model, i), QUBOTools.variable(model, j)) => Float64(v)
+        for ((i, j), v) in QUBOTools.quadratic_terms(model)
+    )
+
+    return QUBOTools.Model{VI,Float64,Int}(
+        V_set,
+        L_f64,
+        Q_f64;
+        scale  = Float64(QUBOTools.scale(model)),
+        offset = Float64(QUBOTools.offset(model)),
+        sense  = QUBOTools.sense(model),
+        domain = QUBOTools.domain(model),
+    )
+end
+
+const _QUBOPREPROCESSING_PKGID = Base.PkgId(
+    Base.UUID("ce9b04da-6a94-4a97-978a-34bf3f916ed2"),
+    "QUBOPreprocessing",
+)
+
+function _qubopreprocessing_module()
+    return Base.require(_QUBOPREPROCESSING_PKGID)
+end
+
+function _run_preprocessing_workspace(
+    qp::Module,
+    f64_model::QUBOTools.Model{VI,Float64,Int},
+    rules::Symbol;
+    integerize_scale::Bool = true,
+)
+    if rules === :strong || rules === :weak
+        allow_weak = rules === :weak
+        ws = Base.invokelatest(
+            qp.Workspace,
+            f64_model;
+            rules            = :mixed,
+            integerize_scale = integerize_scale,
+        )
+        Base.invokelatest(
+            qp.schedule_reductions!,
+            ws;
+            enable_dominance     = true,
+            enable_elimination   = true,
+            enable_relations     = true,
+            enable_star_triangle = true,
+            allow_weak_dominance = allow_weak,
+            allow_weak_relations = allow_weak,
+        )
+        Base.invokelatest(qp.apply_roof_duality!, ws)
+        Base.invokelatest(qp.apply_submodular_cut!, ws)
+        Base.invokelatest(qp.apply_maxcut!, ws; allow_weak = allow_weak)
+        Base.invokelatest(qp.probe_variables!, ws; order = :coercive)
+        Base.invokelatest(
+            qp.schedule_reductions!,
+            ws;
+            enable_dominance     = true,
+            enable_elimination   = true,
+            enable_relations     = true,
+            enable_star_triangle = true,
+            allow_weak_dominance = allow_weak,
+            allow_weak_relations = allow_weak,
+        )
+        return ws
+    else
+        res = Base.invokelatest(
+            qp.preprocess,
+            f64_model;
+            rules            = rules,
+            integerize_scale = integerize_scale && (rules !== :identity),
+        )
+        return res isa Tuple ? first(res) : res
+    end
+end
+
+function _can_convert_to_coeff_type(::Type{T}, val::Float64)::Bool where {T}
+    if T <: Integer
+        return isfinite(val) && isinteger(val) &&
+               typemin(T) <= val <= typemax(T)
+    else
+        return isfinite(val)
+    end
+end
+
+function _convert_to_coeff_type(::Type{T}, val::Float64)::T where {T}
+    if T <: Integer
+        return round(T, val)
+    else
+        return convert(T, val)
+    end
+end
+
+function _reduced_model_fits_type(
+    ::Type{T},
+    reduced_f64::QUBOTools.Model{VI,Float64,Int},
+)::Bool where {T}
+    _can_convert_to_coeff_type(T, QUBOTools.scale(reduced_f64)) || return false
+    _can_convert_to_coeff_type(T, QUBOTools.offset(reduced_f64)) || return false
+
+    for (_, v) in QUBOTools.linear_terms(reduced_f64)
+        _can_convert_to_coeff_type(T, v) || return false
+    end
+    for (_, v) in QUBOTools.quadratic_terms(reduced_f64)
+        _can_convert_to_coeff_type(T, v) || return false
+    end
+
+    return true
+end
+
+function _convert_reduced_model(
+    ::Type{T},
+    orig_model::QUBOTools.Model{VI,T,Int},
+    reduced_f64::QUBOTools.Model{VI,Float64,Int},
+)::QUBOTools.Model{VI,T,Int} where {T}
+    V_set = Set{VI}(QUBOTools.variables(reduced_f64))
+    L_T = Dict{VI,T}(
+        QUBOTools.variable(reduced_f64, i) => _convert_to_coeff_type(T, v)
+        for (i, v) in QUBOTools.linear_terms(reduced_f64)
+    )
+    Q_T = Dict{Tuple{VI,VI},T}(
+        (QUBOTools.variable(reduced_f64, i), QUBOTools.variable(reduced_f64, j)) =>
+            _convert_to_coeff_type(T, v)
+        for ((i, j), v) in QUBOTools.quadratic_terms(reduced_f64)
+    )
+    start = Dict{VI,Int}()
+    for vi in V_set
+        orig_idx = QUBOTools.index(orig_model, vi)
+        s_val = QUBOTools.start(orig_model, orig_idx)
+        if !isnothing(s_val)
+            start[vi] = s_val
+        end
+    end
+
+    return QUBOTools.Model{VI,T,Int}(
+        V_set,
+        L_T,
+        Q_T;
+        scale  = _convert_to_coeff_type(T, QUBOTools.scale(reduced_f64)),
+        offset = _convert_to_coeff_type(T, QUBOTools.offset(reduced_f64)),
+        sense  = QUBOTools.sense(reduced_f64),
+        domain = QUBOTools.domain(reduced_f64),
+        start  = start,
+    )
+end
+
+function _preprocess_sampler_model(
+    orig_model::QUBOTools.Model{VI,T,Int},
+    rules::Symbol,
+) where {T}
+    qp = _qubopreprocessing_module()
+    f64_model = _model_to_float64(orig_model)
+    integerize = !(T <: Integer)
+    ws = _run_preprocessing_workspace(qp, f64_model, rules; integerize_scale = integerize)
+
+    exported = try
+        Base.invokelatest(qp.materialize, ws)
+    catch err
+        err isa ArgumentError || rethrow()
+        id_ws = Base.invokelatest(
+            qp.Workspace,
+            f64_model;
+            rules            = :identity,
+            integerize_scale = false,
+        )
+        Base.invokelatest(qp.materialize, id_ws)
+    end
+
+    reduced_f64 = Base.invokelatest(qp.export_model, exported)
+
+    if !_reduced_model_fits_type(T, reduced_f64)
+        id_ws = Base.invokelatest(
+            qp.Workspace,
+            f64_model;
+            rules            = :identity,
+            integerize_scale = false,
+        )
+        exported = Base.invokelatest(qp.materialize, id_ws)
+        reduced_f64 = Base.invokelatest(qp.export_model, exported)
+    end
+
+    reduced_model = _convert_reduced_model(T, orig_model, reduced_f64)
+
+    return exported, reduced_model
+end
+
+function _reconstruct_preprocessed_sampleset(
+    orig_model::QUBOTools.Model{VI,T,Int},
+    reduced_model::QUBOTools.Model{VI,T,Int},
+    exported,
+    raw_sampleset::SampleSet{T,Int},
+    rules::Symbol,
+    preprocess_time::Float64,
+)::SampleSet{T,Int} where {T}
+    qp = _qubopreprocessing_module()
+    n_orig = QUBOTools.dimension(orig_model)
+    n_reduced = QUBOTools.dimension(reduced_model)
+    orig_sense = QUBOTools.sense(orig_model)
+    orig_domain = QUBOTools.domain(orig_model)
+    raw_domain = QUBOTools.domain(raw_sampleset)
+
+    lifted_samples = Vector{Sample{T,Int}}(undef, length(raw_sampleset))
+    for (idx, sample) in enumerate(raw_sampleset)
+        y_raw = QUBOTools.state(sample)
+        y_domain =
+            raw_domain === orig_domain ? y_raw :
+            QUBOTools.cast(raw_domain => orig_domain, y_raw)
+        rec = Base.invokelatest(qp.reconstruct, exported, y_domain)
+        full_state = getfield(rec, :state)::Vector{Int}
+        val_orig = QUBOTools.value(orig_model, full_state)
+        lifted_samples[idx] = Sample{T,Int}(
+            full_state,
+            val_orig,
+            QUBOTools.reads(sample),
+        )
+    end
+
+    cert = getfield(exported, :certificate)
+    chain_len = length(getfield(cert, :reduction_chain))
+    metadata = deepcopy(QUBOTools.metadata(raw_sampleset))
+    metadata["preprocess"] = Dict{String,Any}(
+        "enabled"            => true,
+        "rules"              => String(rules),
+        "original_variables" => n_orig,
+        "reduced_variables"  => n_reduced,
+        "removed_variables"  => n_orig - n_reduced,
+        "reduction_steps"    => chain_len,
+        "time"               => preprocess_time,
+    )
+
+    time_meta = get(metadata, "time", nothing)
+    if time_meta isa AbstractDict
+        time_meta["preprocess"] = preprocess_time
+        eff = get(time_meta, "effective", nothing)
+        if eff isa Real
+            time_meta["effective"] = Float64(eff) + preprocess_time
+        end
+    else
+        metadata["time"] = Dict{String,Any}(
+            "preprocess" => preprocess_time,
+            "effective"  => preprocess_time,
+        )
+    end
+
+    if n_reduced == 0 && !isempty(lifted_samples)
+        opt_val = QUBOTools.value(first(lifted_samples))
+        bound_meta = get(metadata, "bound", nothing)
+        if bound_meta isa AbstractDict &&
+           get(metadata, "termination_status", nothing) === MOI.OPTIMAL
+            if isnothing(get(bound_meta, "value", nothing))
+                bound_meta["value"] = opt_val
+                bound_meta["raw_mip_min_bound"] =
+                    orig_sense === QUBOTools.Min ? opt_val : -opt_val
+                metadata["objective_bound"] = opt_val
+            end
+            if n_orig > 0 && isnothing(get(bound_meta, "relative_gap", nothing))
+                bound_meta["relative_gap"] = zero(T)
+                bound_meta["relative_gap_definition"] = "preprocessed_exact"
+                metadata["relative_gap"] = zero(T)
+            end
+        end
+    end
+
+    return SampleSet{T,Int}(
+        lifted_samples;
+        metadata = metadata,
+        sense    = orig_sense,
+        domain   = orig_domain,
+    )
 end
 
 function _sample!(sampler::AbstractSampler{T}, sampleset::SampleSet{T}, total_time::Float64) where {T}

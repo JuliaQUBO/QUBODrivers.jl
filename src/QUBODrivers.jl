@@ -58,6 +58,7 @@ include("library/setup/macro.jl")
 export AbstractSampler, RandomSeed, random_seed
 export FinalNumberOfReads, final_number_of_reads
 export AutoConfigure, auto_configure, supports_auto_configure, has_explicit_raw_attr
+export Preprocess, preprocess_rules
 export PostSampleCallback, PostSampleTransform, post_sample_callback, post_sample_transform
 export total_time, effective_time, validate_metadata
 export supports_seed, honors_final_reads, enforces_time_limit

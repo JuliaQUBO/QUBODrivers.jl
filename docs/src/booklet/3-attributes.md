@@ -6,6 +6,8 @@
 QUBODrivers.SamplerAttribute
 QUBODrivers.FinalNumberOfReads
 QUBODrivers.final_number_of_reads
+QUBODrivers.Preprocess
+QUBODrivers.preprocess_rules
 QUBODrivers.PostSampleCallback
 QUBODrivers.PostSampleTransform
 QUBODrivers.post_sample_callback
@@ -36,6 +38,13 @@ that attribute.
 
 Built-in samplers that do not have a separate final sampling phase document the
 attribute as ignored and report their fixed returned read count in metadata.
+
+Generated optimizers also support `QUBODrivers.Preprocess()` and the raw key
+`"preprocess"` (default `:none`). Setting it to `:strong`, `:weak`, `:dominance`,
+`:elimination`, `:relations`, `:mixed`, or `:identity` runs
+`QUBOPreprocessing.jl` before `sample`, passes the reduced model to the
+sampler, reconstructs full-dimensional samples afterward, and records reduction
+statistics in `metadata["preprocess"]` and `metadata["time"]["preprocess"]`.
 
 Generated optimizers also support `QUBODrivers.PostSampleCallback()` and the
 raw key `"post_sample_callback"`. The callback receives a copied `SampleSet`

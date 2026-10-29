@@ -142,6 +142,25 @@ accepts `FinalNumberOfReads` but reports `honors_final_reads == false`. See its
 [results contract](https://juliaqubo.github.io/QUBODecomposition.jl/dev/results/)
 and [Public composition pattern](@ref) for conservative result/status handling.
 
+## Preprocessing Metadata
+
+When `QUBODrivers.Preprocess()` (raw key `"preprocess"`) is set to an active
+`QUBOPreprocessing.jl` rule mode (`:strong`, `:weak`, `:dominance`,
+`:elimination`, `:relations`, `:mixed`, or `:identity`), `QUBODrivers` stamps
+`metadata["preprocess"]` and `metadata["time"]["preprocess"]`:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `metadata["preprocess"]["rules"]` | `String` | Active rule mode name (e.g., `"strong"` or `"weak"`). |
+| `metadata["preprocess"]["guarantee"]` | `String` | Guarantee of the reduction certificate (`"strong"`, `"weak"`, or `"none"`). |
+| `metadata["preprocess"]["initial_variables"]` | non-negative `Integer` | Variable count before preprocessing. |
+| `metadata["preprocess"]["reduced_variables"]` | non-negative `Integer` | Variable count of the reduced model passed to `sample`. |
+| `metadata["preprocess"]["fixed_variables"]` | non-negative `Integer` | Number of variables fixed by unary dominance, probing, roof duality, or submodular cuts. |
+| `metadata["preprocess"]["eliminated_variables"]` | non-negative `Integer` | Number of variables eliminated by pair relations or bounded-degree local elimination. |
+| `metadata["preprocess"]["total_removed_variables"]` | non-negative `Integer` | Total variables removed (`initial_variables - reduced_variables`). |
+| `metadata["preprocess"]["reduction_ratio"]` | `Float64` in `[0.0, 1.0]` | Fraction of variables removed (`total_removed_variables / initial_variables`). |
+| `metadata["time"]["preprocess"]` | non-negative `Real` | Combined wall-clock seconds spent in model reduction and sample reconstruction. |
+
 ## Checking metadata
 
 ```julia
