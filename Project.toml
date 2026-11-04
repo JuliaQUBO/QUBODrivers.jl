@@ -22,9 +22,9 @@ QUBODrivers_Test_Ext = ["Test"]
 MOI_PythonCall_Ext   = ["PythonCall"]
 
 [compat]
-DynamicPolynomials = "0.5, 0.6"
+DynamicPolynomials = "0.5, 0.6, 0.7"
 MathOptInterface = "1.17"
-MultivariatePolynomials = "0.5"
+MultivariatePolynomials = "0.5, 0.6"
 MutableArithmetics = "1"
 PythonCall = "0.9"
 QUBOPreprocessing = "0.1.3"
