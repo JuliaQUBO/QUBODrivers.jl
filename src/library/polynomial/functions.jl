@@ -24,7 +24,12 @@ const VariableOrder =
     DynamicPolynomials.Commutative{DynamicPolynomials.CreationOrder}
 const MonomialOrder = MP.Graded{MP.LexOrder}
 const VarType = DynamicPolynomials.Variable{VariableOrder,MonomialOrder}
-const PolyType{T} = DynamicPolynomials.Polynomial{VariableOrder,MonomialOrder,T}
+const PolyType = if DynamicPolynomials.Polynomial isa UnionAll &&
+                    DynamicPolynomials.Polynomial.body isa DataType
+    DynamicPolynomials.Polynomial
+else
+    DynamicPolynomials.Polynomial{VariableOrder,MonomialOrder}
+end
 
 @doc raw"""
     polynomial_type(::Type{MOI.VariableIndex})
